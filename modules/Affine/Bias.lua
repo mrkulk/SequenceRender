@@ -15,7 +15,7 @@ function Bias:updateOutput(input)
 end
 
 function Bias:updateGradInput(input, gradOutput)
-  self.gradInput = torch.zeros(input:size())
+  self.gradInput = torch.zeros(input:size()):cuda()
   return self.gradInput
 end
 

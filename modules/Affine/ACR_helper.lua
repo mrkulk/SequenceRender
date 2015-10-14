@@ -285,6 +285,7 @@ function ACR_helper:getTemplateValue(bsize, template, template_x, template_y)
     if template_x[i] < 1 or template_x[i] > template:size()[2] or template_y[i] < 1 or template_y[i] > template:size()[3] then
       res[i] = 0
     else
+      -- print(template_x[i], template_y[i], template:size())
       res[i] = template[i][template_x[i]][template_y[i]]
     end
   end

@@ -86,7 +86,7 @@ transform =
 --]]
 
 function INTM:updateGradInput(input, gradOutput)
-  --print("INTM gradOutput:", gradOutput)
+  -- print("INTM gradOutput:", gradOutput)
   bsize = self.bsize
   --gradOutput_reshaped = gradOutput[{{1,9}}]:reshape(3,3) --last is intensity
   local gradOutput_reshaped = torch.zeros(bsize, 3, 3):cuda()
@@ -101,6 +101,7 @@ function INTM:updateGradInput(input, gradOutput)
   z=input[{{},5}]
   theta=input[{{},6}]
 
+  -- print(t1, t2, s1, s2, z, theta)
   grad_s1 = torch.zeros(bsize, 3,3):cuda()
   grad_s1[{{},1,1}]=torch.cos(theta);
   grad_s1[{{},1,3}]=torch.cmul(t1,torch.cos(theta))
@@ -136,17 +137,17 @@ function INTM:updateGradInput(input, gradOutput)
   self.gradInput = torch.zeros(bsize, self.input_dim):cuda()
 
   for i=1,bsize do
-    self.gradInput[i][1] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_t1[{i,{},{}}]))
-    self.gradInput[i][2] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_t2[{i,{},{}}]))
-    self.gradInput[i][3] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_s1[{i,{},{}}]))
-    self.gradInput[i][4] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_s2[{i,{},{}}]))
-    self.gradInput[i][5] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_z[{i,{},{}}]))
-    self.gradInput[i][6] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_theta[{i,{},{}}]))
+    self.gradInput[i][1] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_t1[{i,{},{}}])) * 0.01
+    self.gradInput[i][2] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_t2[{i,{},{}}])) * 0.01
+    self.gradInput[i][3] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_s1[{i,{},{}}])) * 0.01
+    self.gradInput[i][4] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_s2[{i,{},{}}])) * 0.01
+    self.gradInput[i][5] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_z[{i,{},{}}])) * 0.01
+    self.gradInput[i][6] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_theta[{i,{},{}}])) * 0.01
 
-    self.gradInput[i][7] = gradOutput[{i,10}] -- intensity is unchanged in this module
+    self.gradInput[i][7] = gradOutput[{i,10}]*0.01 -- intensity is unchanged in this module
   end
 
-  -- print("intm gradinput", self.gradInput:sum())
 
+  -- print("intm gradinput", self.gradInput:sum())
   return self.gradInput
 end

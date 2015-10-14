@@ -5,6 +5,8 @@
 require 'nngraph'
 require 'cunn'
 require 'cudnn'
+require 'rmsprop'
+require 'stn'
 -- require 'ParallelParallel'
 
 model = {}
@@ -41,94 +43,114 @@ function lstm(x, prev_c, prev_h)
 end
 
 
-function create_decoder(bsize, num_acrs, template_width, image_width)
-  local mod = nn.Sequential()
-  local decoder = nn.Parallel(2,2)
-  for ii=1,num_acrs do
-    local acr_wrapper = nn.Sequential()
-    acr_wrapper:add(nn.Replicate(2))
+-- function create_decoder(bsize, num_acrs, template_width, image_width)
+--   local mod = nn.Sequential()
+--   local decoder = nn.Parallel(2,2)
+--   for ii=1,num_acrs do
+--     local acr_wrapper = nn.Sequential()
+--     acr_wrapper:add(nn.Replicate(2))
 
-    acr_wrapper:add(nn.SplitTable(1))
+--     acr_wrapper:add(nn.SplitTable(1))
 
-    local acr_in = nn.ParallelTable()
-    local biasWrapper = nn.Sequential()
-      biasWrapper:add(nn.Bias(bsize, template_width*template_width))
-      --biasWrapper:add(nn.PrintModule("PostBias"))
-      biasWrapper:add(nn.Exp())
-      biasWrapper:add(nn.AddConstant(1))
-      biasWrapper:add(nn.Log())
-    acr_in:add(biasWrapper)
+--     local acr_in = nn.ParallelTable()
+--     local biasWrapper = nn.Sequential()
+--       biasWrapper:add(nn.Bias(bsize, template_width*template_width))
+--       --biasWrapper:add(nn.PrintModule("PostBias"))
+--       biasWrapper:add(nn.Exp())
+--       biasWrapper:add(nn.AddConstant(1))
+--       biasWrapper:add(nn.Log())
+--     acr_in:add(biasWrapper)
 
-    local INTMWrapper = nn.Sequential()
-      local splitter = nn.Parallel(2,2)
-        for i = 1,2 do
-          splitter:add(nn.Reshape(bsize, 1))
-        end
+--     local INTMWrapper = nn.Sequential()
+--       local splitter = nn.Parallel(2,2)
 
-        --sx
-        local tw = nn.Sequential()
-          tw:add(nn.Exp())
-          tw:add(nn.AddConstant(1))
-          tw:add(nn.Log())
-          tw:add(nn.Reshape(bsize, 1))
-          -- tw:add(nn.PrintModule('INTENSITY MOD'))
-        splitter:add(tw)
-        --sy
-        local tw = nn.Sequential()
-          tw:add(nn.Exp())
-          tw:add(nn.AddConstant(1))
-          tw:add(nn.Log())
-          tw:add(nn.Reshape(bsize, 1))
-          -- tw:add(nn.PrintModule('INTENSITY MOD'))
-        splitter:add(tw)
+--         --tx
+--         local tw = nn.Sequential()
+--           tw:add(nn.Sigmoid())
+--           tw:add(nn.AddConstant(-0.5))
+--           tw:add(nn.MulConstant(image_width))
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
 
-        local tw = nn.Sequential()
-          -- tw:add(nn.Exp())
-          -- tw:add(nn.AddConstant(1))
-          -- tw:add(nn.Log())
-          tw:add(nn.Reshape(bsize, 1))
-          -- -- tw:add(nn.PrintModule('INTENSITY MOD'))
-        splitter:add(tw)
+--         --tx
+--         local tw = nn.Sequential()
+--           tw:add(nn.Sigmoid())
+--           tw:add(nn.AddConstant(-0.5))
+--           tw:add(nn.MulConstant(image_width))
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
 
-        local tw = nn.Sequential()
+--         --sx
+--         local tw = nn.Sequential()
+--           -- tw:add(nn.Sigmoid())
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
+--         --sy
+--         local tw = nn.Sequential()
+--           -- tw:add(nn.Sigmoid())
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
 
-          -- tw:add(nn.Exp())
-          -- tw:add(nn.AddConstant(1))
-          -- tw:add(nn.Log())
-          tw:add(nn.Reshape(bsize, 1))
-          -- tw:add(nn.PrintModule('INTENSITY MOD'))
-        splitter:add(tw)
+--         local tw = nn.Sequential()
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
+
+--         local tw = nn.Sequential()
+--           tw:add(nn.Reshape(bsize, 1))
+--         splitter:add(tw)
 
 
-        local intensityWrapper = nn.Sequential()
-          intensityWrapper:add(nn.Exp())
-          intensityWrapper:add(nn.AddConstant(1))
-          intensityWrapper:add(nn.Log())
-          intensityWrapper:add(nn.Reshape(bsize, 1))
-          -- intensityWrapper:add(nn.PrintModule('INTENSITY MOD'))
-        splitter:add(intensityWrapper)
-      INTMWrapper:add(splitter)
-      INTMWrapper:add(nn.INTM(bsize, 7, 10, image_width))
-      -- INTMWrapper:add(nn.INTMReg())
-    acr_in:add(INTMWrapper)
-    acr_wrapper:add(acr_in)
-    acr_wrapper:add(nn.ACR(bsize, image_width))
+--         local intensityWrapper = nn.Sequential()
+--           intensityWrapper:add(nn.Exp())
+--           intensityWrapper:add(nn.AddConstant(1))
+--           intensityWrapper:add(nn.Log())
+--           intensityWrapper:add(nn.Reshape(bsize, 1))
+--         splitter:add(intensityWrapper)
 
-    decoder:add(acr_wrapper)
-  end
-  mod:add(decoder)
+--       INTMWrapper:add(splitter)
+--       INTMWrapper:add(nn.INTM(bsize, 7, 10, image_width))
+--       -- INTMWrapper:add(nn.INTMReg())
+--     acr_in:add(INTMWrapper)
+--     acr_wrapper:add(acr_in)
+--     acr_wrapper:add(nn.ACR(bsize, image_width))
 
-  mod:add(nn.Reshape(num_acrs, image_width,image_width))
-  mod:add(nn.Sum(2))
-  mod:add(nn.Reshape(1,image_width,image_width))
-  mod:add(nn.Sigmoid())
-  return mod
+--     decoder:add(acr_wrapper)
+--   end
+--   mod:add(decoder)
+
+--   mod:add(nn.Reshape(num_acrs, image_width,image_width))
+--   mod:add(nn.Sum(2))
+--   mod:add(nn.Reshape(1,image_width,image_width))
+--   mod:add(nn.Sigmoid())
+--   return mod
+-- end
+
+function get_transformer(params)
+  local x = nn.Identity()()
+  local encoder_out = nn.Identity()()
+
+  local outLayer = nn.Linear(params.rnn_size,6)(encoder_out)
+  outLayer.data.module.weight:fill(0)
+  local bias = torch.FloatTensor(6):fill(0)
+  bias[1]=1
+  bias[5]=1
+  outLayer.data.module.bias:copy(bias)
+  -- there we generate the grids
+  local grid = nn.AffineGridGeneratorBHWD(32,32)(nn.View(2,3)(outLayer))
+
+  -- first branch is there to transpose inputs to BHWD, for the bilinear sampler
+  local tranet=nn.Transpose({2,3},{3,4})(x)
+
+  local spanet = nn.BilinearSamplerBHWD()({tranet, grid})
+  local sp_out = nn.Transpose({3,4},{2,3})(spanet)
+  return nn.gModule({x, encoder_out}, {sp_out})
 end
+
 
 function create_network(params)
   local prev_s = nn.Identity()() -- LSTM
   local x = nn.Identity()() --input
-  local prev_canvas = nn.Identity()()
+  -- local prev_canvas = nn.Identity()()
 
   local num_acrs = params.num_acrs
   local template_width = params.template_width
@@ -136,32 +158,42 @@ function create_network(params)
   local bsize = params.bsize
 
   --- encoder ---
-  local input_image = nn.JoinTable(2)({x,prev_canvas})
-  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(2, 32, 3, 3)(input_image)))
+  local input_image = x-- nn.JoinTable(2)({x,prev_canvas})
+  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 32, 3, 3)(input_image)))
   local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(32, 64, 3, 3)(enc1)))
   -- local fc1 = nn.ReLU()(nn.Linear(64*6*6,200)((nn.Reshape(64*6*6)(enc2))))
   -- local encout = nn.Reshape(num_acrs,7)(nn.Linear(200, num_acrs*7)(fc1))
   local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
   
-  local i                = {[0] = nn.Identity()(fc1)}
+  local rnn_i                = {[0] = nn.Identity()(fc1)}
   local next_s           = {}
   local split         = {prev_s:split(2 * params.layers)}
   for layer_idx = 1, params.layers do
     local prev_c         = split[2 * layer_idx - 1]
     local prev_h         = split[2 * layer_idx]
-    local dropped        = nn.Dropout(params.dropout)(i[layer_idx - 1])
+    local dropped        = nn.Dropout(params.dropout)(rnn_i[layer_idx - 1])
     local next_c, next_h = lstm(dropped, prev_c, prev_h)
     table.insert(next_s, next_c)
     table.insert(next_s, next_h)
-    i[layer_idx] = next_h
+    rnn_i[layer_idx] = next_h
   end
-  local encout = nn.Reshape(num_acrs,7)(nn.Linear(params.rnn_size, num_acrs*7)(i[params.layers]))
 
-  local new_canvas = create_decoder(bsize, num_acrs, template_width, image_width)(encout)
+  local sts = {}
+  local canvas = {}
+  for i=1,params.num_acrs do
+    sts[i] = {}
+    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(nn.Bias(bsize, template_width*template_width)(x)))
+    local mem_out = nn.Exp()(nn.AddConstant(1)(nn.Log()(mem)))
+    sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
+    sts[i]["transformer"] = get_transformer(params)({mem_out, sts[i]["enc_out"]})
+    -- adding up all frames on single canvas
+    table.insert(canvas, sts[i]["transformer"])
+  end
 
-  local err = nn.MSECriterion()({new_canvas, x})
+  local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
 
-  return nn.gModule({x,prev_canvas, prev_s},{err, nn.Identity()(next_s), new_canvas})
+  local err = nn.BCECriterion()({canvas_out, x})
+  return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
 end
 
 
@@ -212,18 +244,18 @@ function fp(data)
   local next_canvas
   for i = 1, params.seq_length do
     local x = data
-    local prev_x 
-    if i == 1 then
-      prev_x = torch.zeros(params.bsize,1,32,32)
-    else
-      prev_x = next_x:clone()
-      prev_x = torch.reshape(prev_x, params.bsize, 1, 32,32)
-    end
+    -- local prev_x 
+    -- if i == 1 then
+    --   prev_x = torch.zeros(params.bsize,1,32,32)
+    -- else
+    --   prev_x = next_x:clone()
+    --   prev_x = torch.reshape(prev_x, params.bsize, 1, 32,32)
+    -- end
     local s = model.s[i - 1]
-    model.err[i], model.s[i], next_x = unpack(model.rnns[i]:forward({x, prev_x, s}))
+    model.err[i], model.s[i], new_canvas = unpack(model.rnns[i]:forward({x, s}))
   end
   g_replace_table(model.start_s, model.s[params.seq_length])
-  return model.err:mean()
+  return model.err:mean(), new_canvas
 end
 
 function bp(data)
@@ -231,18 +263,18 @@ function bp(data)
   reset_ds()
   for i = params.seq_length, 1, -1 do
     local x = data
-    local prev_x 
-    if i == 1 then
-      prev_x = torch.zeros(params.bsize,1,32,32)
-    else
-      prev_x = next_x:clone()
-    end
+    -- local prev_x 
+    -- if i == 1 then
+    --   prev_x = torch.zeros(params.bsize,1,32,32)
+    -- else
+    --   prev_x = next_x:clone()
+    -- end
     local s = model.s[i - 1]
     local derr = transfer_data(torch.ones(1))
     local dnewx = transfer_data(torch.zeros(params.bsize, 32, 32))
-    local tmp = model.rnns[i]:backward({x, prev_x, s},
+    local tmp = model.rnns[i]:backward({x, s},
                                        {derr, model.ds, dnewx})
-    g_replace_table(model.ds, tmp[3])
+    g_replace_table(model.ds, tmp[2])
 
     cutorch.synchronize()
   end
@@ -251,7 +283,10 @@ function bp(data)
     local shrink_factor = params.max_grad_norm / model.norm_dw
     paramdx:mul(shrink_factor)
   end
-  paramx:add(paramdx:mul(-params.lr))
+
+  paramx = rmsprop(paramdx, paramx, config, state)
+
+  -- paramx:add(paramdx:mul(-params.lr))
 end
 
 
