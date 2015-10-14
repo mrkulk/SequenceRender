@@ -89,7 +89,7 @@ function INTM:updateGradInput(input, gradOutput)
   --print("INTM gradOutput:", gradOutput)
   bsize = self.bsize
   --gradOutput_reshaped = gradOutput[{{1,9}}]:reshape(3,3) --last is intensity
-  local gradOutput_reshaped = torch.zeros(bsize, 3, 3)
+  local gradOutput_reshaped = torch.zeros(bsize, 3, 3):cuda()
   for i=1, bsize do
     gradOutput_reshaped[{i,{},{}}] = gradOutput[{i,{1,9}}]:reshape(3,3) --last is intensity
   end
@@ -101,31 +101,31 @@ function INTM:updateGradInput(input, gradOutput)
   z=input[{{},5}]
   theta=input[{{},6}]
 
-  grad_s1 = torch.zeros(bsize, 3,3)
+  grad_s1 = torch.zeros(bsize, 3,3):cuda()
   grad_s1[{{},1,1}]=torch.cos(theta);
   grad_s1[{{},1,3}]=torch.cmul(t1,torch.cos(theta))
   grad_s1[{{},2,1}]=torch.sin(theta);
   grad_s1[{{},2,3}]=torch.cmul(t1,torch.sin(theta))
 
-  grad_s2 = torch.zeros(bsize, 3,3)
+  grad_s2 = torch.zeros(bsize, 3,3):cuda()
   grad_s2[{{},1,2}]= torch.cmul(z,torch.cos(theta))-torch.sin(theta);
   grad_s2[{{},1,3}]=torch.cmul(-t2,(torch.sin(theta)- torch.cmul(z,torch.cos(theta))))
   grad_s2[{{},2,2}]=torch.cos(theta)+ torch.cmul(z,torch.sin(theta));
   grad_s2[{{},2,3}]= torch.cmul(t2,(torch.cos(theta)+torch.cmul(z,torch.sin(theta))))
 
-  grad_t1 = torch.zeros(bsize, 3,3)
+  grad_t1 = torch.zeros(bsize, 3,3):cuda()
   grad_t1[{{},1,3}]=torch.cmul(s1,torch.cos(theta)); grad_t1[{{},2,3}]=torch.cmul(s1,torch.sin(theta))
 
-  grad_t2 = torch.zeros(bsize, 3,3)
+  grad_t2 = torch.zeros(bsize, 3,3):cuda()
   grad_t2[{{},1,3}]=torch.cmul(-s2,(torch.sin(theta) - torch.cmul(z,torch.cos(theta)))); grad_t2[{{},2,3}]=torch.cmul(s2,(torch.cos(theta) + torch.cmul(z,torch.sin(theta))))
 
-  grad_z = torch.zeros(bsize, 3,3)
+  grad_z = torch.zeros(bsize, 3,3):cuda()
   grad_z[{{},1,2}]=torch.cmul(s2,torch.cos(theta));
   grad_z[{{},1,3}]=torch.cmul(s2,torch.cmul(t2,torch.cos(theta)))
   grad_z[{{},2,2}]=torch.cmul(s2,torch.sin(theta));
   grad_z[{{},2,3}]=torch.cmul(s2,torch.cmul(t2,torch.sin(theta)))
 
-  grad_theta = torch.zeros(bsize, 3,3)
+  grad_theta = torch.zeros(bsize, 3,3):cuda()
   grad_theta[{{},1,1}] = torch.cmul(-s1,torch.sin(theta));
   grad_theta[{{},1,2}]= torch.cmul(-s2,(torch.cos(theta) + torch.cmul(z,torch.sin(theta))));
   grad_theta[{{},1,3}] = torch.cmul(-s1,torch.cmul(t1,torch.sin(theta))) - torch.cmul(s2,torch.cmul(t2,(torch.cos(theta) + torch.cmul(z,torch.sin(theta)))))
@@ -133,7 +133,7 @@ function INTM:updateGradInput(input, gradOutput)
   grad_theta[{{},2,2}]= torch.cmul(-s2,(torch.sin(theta) - torch.cmul(z,torch.cos(theta))));
   grad_theta[{{},2,3}] = torch.cmul(s1,torch.cmul(t1,torch.cos(theta))) - torch.cmul(s2, torch.cmul(t2,(torch.sin(theta) - torch.cmul(z,torch.cos(theta)))))
 
-  self.gradInput = torch.zeros(bsize, self.input_dim)
+  self.gradInput = torch.zeros(bsize, self.input_dim):cuda()
 
   for i=1,bsize do
     self.gradInput[i][1] = torch.sum(torch.cmul(gradOutput_reshaped[{i,{},{}}], grad_t1[{i,{},{}}]))

@@ -233,7 +233,7 @@ extern "C" void get_gradACR_gradient(int imwidth, int tdim, int bsize, double *o
     cudaMemcpy(gradTemplate, cuda_gradTemplate, gradTemplate_size, cudaMemcpyDeviceToHost);
     cudaMemcpy(gradPose, cuda_gradPose, gradPose_size, cudaMemcpyDeviceToHost);
     
-    printf("CUDA status: %d\n", cudaDeviceSynchronize());
+   // printf("CUDA status: %d\n", cudaDeviceSynchronize());
 }
 
 

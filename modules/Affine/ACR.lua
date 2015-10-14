@@ -127,6 +127,8 @@ end
 
 function ACR:updateGradInput(input, gradOutput)
   --print('ACR grad')
+  input[1] = input[1]:double()
+  input[2] = input[2]:double()
   local bsize = self.bsize
   local template = input[1]:reshape(bsize, math.sqrt(input[1]:size()[2]), math.sqrt(input[1]:size()[2]))
   local iGeoPose = input[2]
@@ -155,8 +157,8 @@ function ACR:updateGradInput(input, gradOutput)
     gradAll[{{bsize*tdim*tdim+1, bsize*tdim*tdim+ bsize*3*3}}]=self.gradPose:reshape(bsize*3*3)
 
     res = gradACRWrapper(imwidth, tdim, bsize,
-      self.output:reshape(bsize*imwidth*imwidth), pose:reshape(bsize*3*3),
-      template:reshape(bsize*tdim*tdim), gradOutput:reshape(bsize*imwidth*imwidth), intensity,
+      self.output:reshape(bsize*imwidth*imwidth):double(), pose:reshape(bsize*3*3),
+      template:reshape(bsize*tdim*tdim), gradOutput:reshape(bsize*imwidth*imwidth):double(), intensity,
       gradAll)
 
     --unpack from lua-C interface
@@ -188,8 +190,9 @@ function ACR:updateGradInput(input, gradOutput)
     self.finalgradPose[{i,10}] = torch.sum(torch.cmul(self.output[{{i,{},{}}}] / intensity[i], gradOutput[{{i,{},{}}}])) --gradOutput[{i,{},{}}]:sum()
   end
 
-  self.gradInput = {self.gradTemplate, self.finalgradPose}
+  self.gradInput = {self.gradTemplate:cuda(), self.finalgradPose:cuda()}
   -- print('ACR GRAD POSE', torch.sum(intensity))
+
   return self.gradInput
 end
 

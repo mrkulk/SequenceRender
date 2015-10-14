@@ -7,6 +7,8 @@ require 'cunn'
 require 'cudnn'
 -- require 'ParallelParallel'
 
+model = {}
+
 function transfer_data(x)
   return x:cuda()
 end
@@ -18,7 +20,7 @@ function lstm(x, prev_c, prev_h)
   local h2h = nn.Linear(params.rnn_size, 4*params.rnn_size)(prev_h)
   local gates = nn.CAddTable()({i2h, h2h})
   
-  -- Reshape to (batch_size, n_gates, hid_size)
+  -- Reshape to (bsize, n_gates, hid_size)
   -- Then slize the n_gates dimension, i.e dimension 2
   local reshaped_gates =  nn.Reshape(4,params.rnn_size)(gates)
   local sliced_gates = nn.SplitTable(2)(reshaped_gates)
@@ -89,7 +91,7 @@ function create_decoder(bsize, num_acrs, template_width, image_width)
         splitter:add(tw)
 
         local tw = nn.Sequential()
-        
+
           -- tw:add(nn.Exp())
           -- tw:add(nn.AddConstant(1))
           -- tw:add(nn.Log())
@@ -115,6 +117,11 @@ function create_decoder(bsize, num_acrs, template_width, image_width)
     decoder:add(acr_wrapper)
   end
   mod:add(decoder)
+
+  mod:add(nn.Reshape(num_acrs, image_width,image_width))
+  mod:add(nn.Sum(2))
+  mod:add(nn.Reshape(1,image_width,image_width))
+  mod:add(nn.Sigmoid())
   return mod
 end
 
@@ -150,121 +157,40 @@ function create_network(params)
   end
   local encout = nn.Reshape(num_acrs,7)(nn.Linear(params.rnn_size, num_acrs*7)(i[params.layers]))
 
-  decoder = create_decoder(bsize, num_acrs, template_width, image_width)(encout)
+  local new_canvas = create_decoder(bsize, num_acrs, template_width, image_width)(encout)
 
-  local mod = nn.gModule({x,prev_canvas, prev_s},{decoder})
-  return mod
-  -- local MEM              = nn.Identity()() -- memory
-  -- local prev_read_key    = nn.Identity()() -- " "
-  -- local prev_read_val    = nn.Identity()() 
-  -- local prev_write_key   = nn.Identity()()
-  -- local prev_write_val   = nn.Identity()()
-  -- local prev_write_erase   = nn.Identity()()
+  local err = nn.MSECriterion()({new_canvas, x})
 
-  -- -- targets whenever available (specified fragments of the program)
-  -- local true_read_key    = nn.Identity()()
-  -- local true_read_val    = nn.Identity()() 
-  -- local true_write_key   = nn.Identity()()
-  -- local true_write_val   = nn.Identity()()
-  -- local true_write_erase = nn.Identity()()
-
-  -- local head_dim = params.rows * params.cols
-  -- local reshape_prev_read_key    = nn.Reshape(params.batch_size, head_dim)(prev_read_key)
-  -- local reshape_prev_read_val    = nn.Reshape(params.batch_size, head_dim)(prev_read_val)
-  -- local reshape_prev_write_key   = nn.Reshape(params.batch_size, head_dim)(prev_write_key)
-  -- local reshape_prev_write_val   = nn.Reshape(params.batch_size, head_dim)(prev_write_val)
-  -- local reshape_prev_write_erase = nn.Reshape(params.batch_size, head_dim)(prev_write_erase)
-
-  -- local concat_x = nn.JoinTable(2)({reshape_prev_read_key, reshape_prev_read_val, reshape_prev_write_key , reshape_prev_write_val, reshape_prev_write_erase })
-  -- local remapped_x = nn.Linear(5*head_dim, params.rnn_size)(concat_x)
-
-  -- local i                = {[0] = nn.Identity()(remapped_x)}
-
-  -- local next_s           = {}
-  -- local split         = {prev_s:split(2 * params.layers)}
-  -- for layer_idx = 1, params.layers do
-  --   local prev_c         = split[2 * layer_idx - 1]
-  --   local prev_h         = split[2 * layer_idx]
-  --   local dropped        = nn.Dropout(params.dropout)(i[layer_idx - 1])
-  --   local next_c, next_h = lstm(dropped, prev_c, prev_h)
-  --   table.insert(next_s, next_c)
-  --   table.insert(next_s, next_h)
-  --   i[layer_idx] = next_h
-  -- end
-
-  -- -- local h2y              = nn.Linear(params.rnn_size, params.input_dim)
-  -- -- local dropped          = nn.Dropout(params.dropout)(i[params.layers])
-  -- -- local pred             = nn.LogSoftMax()(h2y(dropped))
-
-  -- ---------------------- Memory Ops ------------------
-  -- local read_channel = nn.ReLU()(i[params.layers])--nn.ReLU()(nn.Linear(params.rnn_size,params.rnn_size)(i[params.layers]))
-  -- -- local read_key = nn.Reshape(params.rows,params.cols)(nn.SoftMax()(nn.Sigmoid()(nn.Linear(params.rnn_size, params.rows*params.cols)(read_channel))))
-  -- local read_key = nn.Reshape(params.rows,params.cols)(nn.Sigmoid()(nn.Linear(params.rnn_size, params.rows*params.cols)(read_channel)))
-  -- -- local read_key = nn.Power(1.5)(read_key1)
-  -- local read_val = nn.componentMul()({MEM, read_key})
-
-  -- local write_channel = nn.ReLU()(i[params.layers])--nn.ReLU()(nn.Linear(params.rnn_size,params.rnn_size)(i[params.layers]))
-  -- -- local write_key = nn.Reshape(params.rows,params.cols)(nn.SoftMax()(nn.Sigmoid()(nn.Linear(params.rnn_size, params.rows*params.cols)(write_channel))))
-  -- local write_key = nn.Reshape(params.rows,params.cols)(nn.Sigmoid()(nn.Linear(params.rnn_size, params.rows*params.cols)(write_channel)))
-  -- -- local write_key = nn.Power(1.5)(write_key1)
-  -- local write_val = nn.Reshape(params.rows,params.cols)(nn.Linear(params.rnn_size, params.rows*params.cols)(write_channel)) 
-  -- local write_erase = nn.Reshape(params.rows,params.cols)(nn.Linear(params.rnn_size, params.rows*params.cols)(write_channel)) 
-
-  -- local erase_val_interim = nn.componentMul()({write_key, write_erase})
-  -- local erase_val = nn.AddConstant(1)(nn.MulConstant(-1)(erase_val_interim))
-  -- local erase_MEM = nn.componentMul()({MEM, erase_val})
-
-  -- local add_val_interim = nn.componentMul()({write_key, write_val})
-  -- local add_MEM = nn.CAddTable()({erase_MEM, add_val_interim})
-
-  -- local err_rk = nn.MSECriterion()({read_key, nn.Reshape(params.rows * params.cols)(true_read_key)})
-  -- local err_rv = nn.MSECriterion()({read_val, nn.Reshape(params.rows * params.cols)(true_read_val)})
-  -- local err_wk = nn.MSECriterion()({write_key, nn.Reshape(params.rows * params.cols)(true_write_key)})
-  -- local err_wv = nn.MSECriterion()({write_val, nn.Reshape(params.rows * params.cols)(true_write_val)})
-  -- local err_we = nn.MSECriterion()({write_erase, nn.Reshape(params.rows * params.cols)(true_write_erase)})
-
-  -- local module           = nn.gModule({prev_s, MEM, prev_read_key, prev_read_val, prev_write_key, prev_write_val, prev_write_erase,
-  --                                                   true_read_key, true_read_val, true_write_key, true_write_val, true_write_erase},
-  --                                     {err_rk, err_rv, err_wk, err_wv, err_we,
-  --                                     nn.Identity()(next_s), add_MEM, read_key, read_val, write_key, write_val, write_erase})
-  
-  -- return module
-
+  return nn.gModule({x,prev_canvas, prev_s},{err, nn.Identity()(next_s), new_canvas})
 end
 
 
 
 function setup()
   print("Creating a RNN LSTM network.")
-  local core_network = create_network()
+  local core_network = create_network(params)
   core_network:cuda()
-  core_network:getParameters():uniform(-params.init_weight, params.init_weight)
   paramx, paramdx = core_network:getParameters()
-  
-  local model = {}
   model.s = {}
   model.ds = {}
   model.start_s = {}
-
   for j = 0, params.seq_length do
     model.s[j] = {}
     for d = 1, 2 * params.layers do
-      model.s[j][d] = transfer_data(torch.zeros(params.batch_size, params.rnn_size))
+      model.s[j][d] = transfer_data(torch.zeros(params.bsize, params.rnn_size))
     end
   end
-
   for d = 1, 2 * params.layers do
-    model.start_s[d] = transfer_data(torch.zeros(params.batch_size, params.rnn_size))
-    model.ds[d] = transfer_data(torch.zeros(params.batch_size, params.rnn_size))
+    model.start_s[d] = transfer_data(torch.zeros(params.bsize, params.rnn_size))
+    model.ds[d] = transfer_data(torch.zeros(params.bsize, params.rnn_size))
   end
-
   model.core_network = core_network
   model.rnns = g_cloneManyTimes(core_network, params.seq_length)
   model.norm_dw = 0
-  model.err = transfer_data(torch.zeros(params.seq_length)) 
-
-  return model
+  model.err = transfer_data(torch.zeros(params.seq_length))
 end
+
+
 
 function reset_state()
   for j = 0, params.seq_length do
@@ -280,176 +206,80 @@ function reset_ds()
   end
 end
 
-function fp(mode, state, target)
-  local predicted_ret, target_ret --final return value (target and predicted)
+function fp(data)
+  g_replace_table(model.s[0], model.start_s)
   reset_state()
-
+  local next_canvas
   for i = 1, params.seq_length do
-    local ret
-
-    if mode == "fake" then
-      ret = model.rnns[i]:forward({
-        model.s[i-1], model.MEM[i-1], model.read_key[i-1], model.read_val[i-1], model.write_key[i-1], model.write_val[i-1], model.write_erase[i-1],
-        state.data.true_read_key[i], state.data.true_read_val[i], state.data.true_write_key[i], state.data.true_write_val[i], state.data.true_write_erase[i]
-      })
+    local x = data
+    local prev_x 
+    if i == 1 then
+      prev_x = torch.zeros(params.bsize,1,32,32)
     else
-
-      local rk, rv, wk, wv, we
-      if TARGET_CACHE[i].cmd == "write" then
-        rk = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        rv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        wk = TARGET_CACHE[i].key:clone(); wk = wk:cuda()
-        wv = TARGET_CACHE[i].val:clone(); wv = wv:cuda()
-        -- print(TARGET_CACHE[i].write_erase_cache:sum())
-        we = TARGET_CACHE[i].write_erase_cache:clone();we = we:cuda()-- torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-      else
-        rk = TARGET_CACHE[i].key:cuda()
-        if TARGET_CACHE[i].mode == "return" then
-          local map = TARGET_CACHE[i].map
-          rv = torch.zeros(params.batch_size, params.rows, params.cols)
-          rv[{{}, {map.from_row[1], map.from_row[2]}, {map.from_col[1], map.from_col[2]}}] = target:clone()
-          rv = rv:cuda()
-          -- rv = TARGET_CACHE[i].memory:cuda()
-          target_ret = rv:clone(); target_ret = target_ret:float()
-        else
-          rv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        end
-        wk = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        wv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        we = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-      end
-
-      ret = model.rnns[i]:forward({
-        model.s[i-1], model.MEM[i-1], model.read_key[i-1], model.read_val[i-1], model.write_key[i-1], model.write_val[i-1], model.write_erase[i-1],
-        rk, rv, wk, wv, we
-      })    
-      if TARGET_CACHE[i].mode == "return" then
-        predicted_ret = ret[9]:float() --read_val
-      end
+      prev_x = next_x:clone()
+      prev_x = torch.reshape(prev_x, params.bsize, 1, 32,32)
     end
-
-    model.err_rk[i] = ret[1][1]
-    model.err_rv[i] = ret[2][1]
-    model.err_wk[i] = ret[3][1]
-    model.err_wv[i] = ret[4][1]
-    model.err_we[i] = ret[5][1]
-    g_replace_table(model.s[i], ret[6])
-    model.MEM[i]:copy(ret[7]:clone()) 
-    model.read_key[i]:copy(ret[8]:clone())
-    model.read_val[i]:copy(ret[9]:clone())
-    model.write_key[i]:copy(ret[10]:clone())
-    model.write_val[i]:copy(ret[11]:clone())
-    model.write_erase[i]:copy(ret[12]:clone())
+    local s = model.s[i - 1]
+    model.err[i], model.s[i], next_x = unpack(model.rnns[i]:forward({x, prev_x, s}))
   end
-  -- g_replace_table(model.start_s, model.s[params.seq_length])
-  return predicted_ret, target_ret, model.err_rk:mean() + model.err_rv:mean() + model.err_wk:mean() + model.err_wv:mean() + model.err_we:mean()
+  g_replace_table(model.start_s, model.s[params.seq_length])
+  return model.err:mean()
 end
 
-function bp(mode,state, target)
+function bp(data)
   paramdx:zero()
   reset_ds()
   for i = params.seq_length, 1, -1 do
-    local derr_rk, derr_rv, derr_wk, derr_wv, derr_we
-
-    local ret
-    if mode == "fake" then
-      derr_rk = transfer_data(torch.ones(1)); derr_rv = transfer_data(torch.ones(1))
-      derr_wk = transfer_data(torch.ones(1)); derr_wv = transfer_data(torch.ones(1)); derr_we = transfer_data(torch.ones(1))
-
-      ret = model.rnns[i]:backward(
-      {
-        model.s[i-1], model.MEM[i-1], model.read_key[i-1], model.read_val[i-1], model.write_key[i-1], model.write_val[i-1], model.write_erase[i-1],
-        state.data.true_read_key[i], state.data.true_read_val[i], state.data.true_write_key[i], state.data.true_write_val[i], state.data.true_write_erase[i]
-      },
-      {
-        derr_rk, derr_rv, derr_wk, derr_wv, derr_we,
-        model.ds, model.ds_MEM, model.ds_read_key, model.ds_read_val, model.ds_write_key, model.ds_write_val, model.ds_write_erase
-      })
+    local x = data
+    local prev_x 
+    if i == 1 then
+      prev_x = torch.zeros(params.bsize,1,32,32)
     else
-
-      local rk, rv, wk, wv, we
-      if TARGET_CACHE[i].cmd == "write" then
-        derr_rk = transfer_data(torch.ones(1)); derr_rv = transfer_data(torch.zeros(1))
-        derr_wk = transfer_data(torch.ones(1)); derr_wv = transfer_data(torch.ones(1)); derr_we = transfer_data(torch.ones(1))
-        rk = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        rv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-      
-        wk = TARGET_CACHE[i].key:clone(); wk = wk:cuda()
-        wv = TARGET_CACHE[i].val:clone(); wv = wv:cuda()
-        we = TARGET_CACHE[i].write_erase_cache:clone();we = we:cuda()
-
-      else
-        derr_rk = transfer_data(torch.ones(1)); 
-        derr_wk = transfer_data(torch.ones(1)); derr_wv = transfer_data(torch.zeros(1)); derr_we = transfer_data(torch.zeros(1))
-        rk = TARGET_CACHE[i].key:clone(); rk = rk:cuda()
-        if TARGET_CACHE[i].mode == "return" then
-          -- rv = TARGET_CACHE[i].memory:cuda()
-          local map = TARGET_CACHE[i].map
-          rv = torch.zeros(params.batch_size, params.rows, params.cols)
-          rv[{{}, {map.from_row[1], map.from_row[2]}, {map.from_col[1], map.from_col[2]}}] = target:clone()
-          rv = rv:cuda()
-          derr_rv = transfer_data(torch.ones(1)) --read output 
-        else
-          rv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-          derr_rv = transfer_data(torch.zeros(1)) --if we write properly, read will be good
-        end
-        wk = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        wv = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-        we = torch.zeros(params.batch_size, params.rows, params.cols):cuda()
-      end
-
-      ret = model.rnns[i]:backward(
-      {
-        model.s[i-1], model.MEM[i-1], model.read_key[i-1], model.read_val[i-1], model.write_key[i-1], model.write_val[i-1], model.write_erase[i-1],
-        rk, rv, wk, wv, we
-      },
-      {
-        derr_rk, derr_rv, derr_wk, derr_wv, derr_we,
-        model.ds, model.ds_MEM, model.ds_read_key, model.ds_read_val, model.ds_write_key, model.ds_write_val, model.ds_write_erase
-      })  
-
-      if TARGET_CACHE[i].mode == "return" then
-          -- print(model.read_key[i][1])
-          -- print(rk[1])
-      end 
+      prev_x = next_x:clone()
     end
-
-
-    g_replace_table(model.ds, ret[1])
-    model.ds_MEM:copy(ret[2])
-    model.ds_read_key:copy(ret[3])
-    model.ds_read_val:copy(ret[4])
-    model.ds_write_key:copy(ret[5])
-    model.ds_write_val:copy(ret[6])
-    model.ds_write_erase:copy(ret[7])
-
-    print(model.ds_read_key[1])
-    -- print('------------')
-    -- for ii=1,7 do
-    --   print(ret[ii][1]:sum())
-    -- end
+    local s = model.s[i - 1]
+    local derr = transfer_data(torch.ones(1))
+    local dnewx = transfer_data(torch.zeros(params.bsize, 32, 32))
+    local tmp = model.rnns[i]:backward({x, prev_x, s},
+                                       {derr, model.ds, dnewx})
+    g_replace_table(model.ds, tmp[3])
 
     cutorch.synchronize()
   end
-
-  if mode ~= "fake" then
-    model.norm_dw = paramdx:norm()
-    if model.norm_dw > params.max_grad_norm then
-      local shrink_factor = params.max_grad_norm / model.norm_dw
-      paramdx:mul(shrink_factor)
-    end
-    paramx:add(paramdx:mul(-params.lr))
+  model.norm_dw = paramdx:norm()
+  if model.norm_dw > params.max_grad_norm then
+    local shrink_factor = params.max_grad_norm / model.norm_dw
+    paramdx:mul(shrink_factor)
   end
+  paramx:add(paramdx:mul(-params.lr))
 end
 
 
-function eval(mode, state)
-  reset_state()
-  g_disable_dropout(model.rnns)
-  local perp = 0
-  for i = 1, params.seq_length do
-    perp = perp + fp(state)
-  end
-  print(mode .. " set perplexity : " .. g_f3(torch.exp(perp / params.seq_length)))
-  g_enable_dropout(model.rnns)
-end
+-- function run_valid()
+--   reset_state(state_valid)
+--   g_disable_dropout(model.rnns)
+--   local len = (state_valid.data:size(1) - 1) / (params.seq_length)
+--   local perp = 0
+--   for i = 1, len do
+--     perp = perp + fp(state_valid)
+--   end
+--   print("Validation set perplexity : " .. g_f3(torch.exp(perp / len)))
+--   g_enable_dropout(model.rnns)
+-- end
+
+-- local function run_test()
+--   reset_state(state_test)
+--   g_disable_dropout(model.rnns)
+--   local perp = 0
+--   local len = state_test.data:size(1)
+--   g_replace_table(model.s[0], model.start_s)
+--   for i = 1, (len - 1) do
+--     local x = state_test.data[i]
+--     local y = state_test.data[i + 1]
+--     perp_tmp, model.s[1] = unpack(model.rnns[1]:forward({x, y, model.s[0]}))
+--     perp = perp + perp_tmp[1]
+--     g_replace_table(model.s[0], model.s[1])
+--   end
+--   print("Test set perplexity : " .. g_f3(torch.exp(perp / (len - 1))))
+--   g_enable_dropout(model.rnns)
+-- end
