@@ -60,7 +60,8 @@ function ACR:updateOutput(input)
 
   local pose = iGeoPose[{{},{1,9}}]:reshape(bsize,3,3)
   local intensity = iGeoPose[{{}, {10}}]:reshape(bsize)
-
+  pose = pose:double()
+  intensity = intensity:double()
   local GPU = 0;
   if GPU == 1 then
     a=1;
@@ -88,7 +89,6 @@ function ACR:updateOutput(input)
       end
     end
   end
-
   return self.output
 end
 
