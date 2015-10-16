@@ -193,7 +193,7 @@ function create_network(params)
   local canvas = {}
   for i=1,params.num_acrs do
     sts[i] = {}
-    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(nn.Bias(bsize, template_width*template_width)(x)))
+    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(nn.Bias(bsize, template_width*template_width)(x):annotate{name='part_' .. i}))
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 

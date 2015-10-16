@@ -19,7 +19,7 @@ params = {
 	bsize = 120,
 	image_width = 32,
 	template_width = 10,
-	num_acrs = 3,
+	num_acrs = 9,
 	rnn_size = 100,
 	seq_length=1,
 	layers=2,
@@ -142,4 +142,5 @@ function main()
 	end
 end
 
-main()
+-- main()
+print(model.rnns[1].fg)
