@@ -1,8 +1,5 @@
 -- Usage: th main.lua
-package.path = package.path .. ';modules/Affine/?.lua'
 require 'nn'
-require 'INTM'
-require 'ACR'
 require 'Bias'
 require 'optim'
 require 'image'
@@ -19,7 +16,7 @@ params = {
 	bsize = 120,
 	image_width = 32,
 	template_width = 10,
-	num_acrs = 9,
+	num_acrs = 5,
 	rnn_size = 100,
 	seq_length=1,
 	layers=2,
@@ -71,7 +68,7 @@ end
 -- unit_test()
 
 
-setup()
+parts = setup()
 function main()
   print("Network parameters:")
   print(params)
@@ -142,5 +139,5 @@ function main()
 	end
 end
 
--- main()
-print(model.rnns[1].fg)
+main()
+-- print(parts[1].data.module.)

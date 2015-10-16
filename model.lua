@@ -1,14 +1,10 @@
--- require 'Normalize'
--- require 'componentMul'
--- require 'PowTable'
+
 require 'nngraph'
 require 'cunn'
 require 'cudnn'
 require 'rmsprop'
 require 'stn'
 require 'GradScale'
-require 'PrintModule'
--- require 'ParallelParallel'
 require 'IntensityMod'
 
 model = {}
@@ -44,88 +40,6 @@ function lstm(x, prev_c, prev_h)
   return next_c, next_h
 end
 
-
--- function create_decoder(bsize, num_acrs, template_width, image_width)
---   local mod = nn.Sequential()
---   local decoder = nn.Parallel(2,2)
---   for ii=1,num_acrs do
---     local acr_wrapper = nn.Sequential()
---     acr_wrapper:add(nn.Replicate(2))
-
---     acr_wrapper:add(nn.SplitTable(1))
-
---     local acr_in = nn.ParallelTable()
---     local biasWrapper = nn.Sequential()
---       biasWrapper:add(nn.Bias(bsize, template_width*template_width))
---       --biasWrapper:add(nn.PrintModule("PostBias"))
---       biasWrapper:add(nn.Exp())
---       biasWrapper:add(nn.AddConstant(1))
---       biasWrapper:add(nn.Log())
---     acr_in:add(biasWrapper)
-
---     local INTMWrapper = nn.Sequential()
---       local splitter = nn.Parallel(2,2)
-
---         --tx
---         local tw = nn.Sequential()
---           tw:add(nn.Sigmoid())
---           tw:add(nn.AddConstant(-0.5))
---           tw:add(nn.MulConstant(image_width))
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
-
---         --tx
---         local tw = nn.Sequential()
---           tw:add(nn.Sigmoid())
---           tw:add(nn.AddConstant(-0.5))
---           tw:add(nn.MulConstant(image_width))
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
-
---         --sx
---         local tw = nn.Sequential()
---           -- tw:add(nn.Sigmoid())
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
---         --sy
---         local tw = nn.Sequential()
---           -- tw:add(nn.Sigmoid())
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
-
---         local tw = nn.Sequential()
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
-
---         local tw = nn.Sequential()
---           tw:add(nn.Reshape(bsize, 1))
---         splitter:add(tw)
-
-
---         local intensityWrapper = nn.Sequential()
---           intensityWrapper:add(nn.Exp())
---           intensityWrapper:add(nn.AddConstant(1))
---           intensityWrapper:add(nn.Log())
---           intensityWrapper:add(nn.Reshape(bsize, 1))
---         splitter:add(intensityWrapper)
-
---       INTMWrapper:add(splitter)
---       INTMWrapper:add(nn.INTM(bsize, 7, 10, image_width))
---       -- INTMWrapper:add(nn.INTMReg())
---     acr_in:add(INTMWrapper)
---     acr_wrapper:add(acr_in)
---     acr_wrapper:add(nn.ACR(bsize, image_width))
-
---     decoder:add(acr_wrapper)
---   end
---   mod:add(decoder)
-
---   mod:add(nn.Reshape(num_acrs, image_width,image_width))
---   mod:add(nn.Sum(2))
---   mod:add(nn.Reshape(1,image_width,image_width))
---   mod:add(nn.Sigmoid())
---   return mod
--- end
 
 function get_transformer(params)
   local x = nn.Identity()()
@@ -191,9 +105,12 @@ function create_network(params)
 
   local sts = {}
   local canvas = {}
+  local parts = {}
   for i=1,params.num_acrs do
     sts[i] = {}
-    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(nn.Bias(bsize, template_width*template_width)(x):annotate{name='part_' .. i}))
+    local part = nn.Bias(bsize, template_width*template_width)(x)
+    parts[i] = part
+    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(part))
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 
@@ -209,14 +126,14 @@ function create_network(params)
   local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
 
   local err = nn.MSECriterion()({canvas_out, x})
-  return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
+  return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out}), parts
 end
 
 
 
 function setup()
   print("Creating a RNN LSTM network.")
-  local core_network = create_network(params)
+  local core_network, parts= create_network(params)
   core_network:cuda()
   paramx, paramdx = core_network:getParameters()
   model.s = {}
@@ -236,6 +153,7 @@ function setup()
   model.rnns = g_cloneManyTimes(core_network, params.seq_length)
   model.norm_dw = 0
   model.err = transfer_data(torch.zeros(params.seq_length))
+  return parts
 end
 
 
