@@ -1,13 +1,15 @@
 -- require 'Normalize'
 -- require 'componentMul'
--- require 'GradScale'
 -- require 'PowTable'
 require 'nngraph'
 require 'cunn'
 require 'cudnn'
 require 'rmsprop'
 require 'stn'
+require 'GradScale'
+require 'PrintModule'
 -- require 'ParallelParallel'
+require 'IntensityMod'
 
 model = {}
 
@@ -130,12 +132,18 @@ function get_transformer(params)
   local encoder_out = nn.Identity()()
 
   local outLayer = nn.Linear(params.rnn_size,6)(encoder_out)
-  outLayer.data.module.weight:fill(0)
-  local bias = torch.FloatTensor(6):fill(0)
-  bias[1]=1
-  bias[5]=1
-  outLayer.data.module.bias:copy(bias)
+  if true then
+    outLayer.data.module.weight:fill(0)
+    local bias = torch.FloatTensor(6):fill(0)
+    bias[1]= 1+torch.rand(1)[1]*2
+    bias[5]= 1+torch.rand(1)[1]*2
+    bias[3]=torch.rand(1)[1]
+    bias[6]=torch.rand(1)[1]
+    outLayer.data.module.bias:copy(bias)
+  end
+
   -- there we generate the grids
+  -- local affines = nn.PrintModule("AFFINE:")(outLayer)
   local grid = nn.AffineGridGeneratorBHWD(32,32)(nn.View(2,3)(outLayer))
 
   -- first branch is there to transpose inputs to BHWD, for the bilinear sampler
@@ -159,11 +167,14 @@ function create_network(params)
 
   --- encoder ---
   local input_image = x-- nn.JoinTable(2)({x,prev_canvas})
-  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 32, 3, 3)(input_image)))
-  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(32, 64, 3, 3)(enc1)))
-  -- local fc1 = nn.ReLU()(nn.Linear(64*6*6,200)((nn.Reshape(64*6*6)(enc2))))
-  -- local encout = nn.Reshape(num_acrs,7)(nn.Linear(200, num_acrs*7)(fc1))
-  local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+  -- local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 32, 3, 3)(input_image)))
+  -- local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(32, 64, 3, 3)(enc1)))
+  -- local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+
+  local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(x)))
+  local fc1 = nn.Tanh()(nn.Linear(2048, params.rnn_size)(enc1))
+  -- local fc1 = nn.Linear(512, params.rnn_size)(enc2)
+
   
   local rnn_i                = {[0] = nn.Identity()(fc1)}
   local next_s           = {}
@@ -183,16 +194,21 @@ function create_network(params)
   for i=1,params.num_acrs do
     sts[i] = {}
     local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(nn.Bias(bsize, template_width*template_width)(x)))
-    local mem_out = nn.Exp()(nn.AddConstant(1)(nn.Log()(mem)))
-    sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
-    sts[i]["transformer"] = get_transformer(params)({mem_out, sts[i]["enc_out"]})
+    local mem_out = mem--nn.Sigmoid()(mem)
+    --intensity for each mem 
+
+    local intensity = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))))--nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
+    local mem_intensity = nn.GradScale(1)(nn.IntensityMod()({intensity, mem_out}))
+
+    sts[i]["enc_out"] = nn.GradScale(1)(nn.Identity()(rnn_i[params.layers]))
+    sts[i]["transformer"] = get_transformer(params)({mem_intensity, sts[i]["enc_out"]})
     -- adding up all frames on single canvas
     table.insert(canvas, sts[i]["transformer"])
   end
 
   local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
 
-  local err = nn.BCECriterion()({canvas_out, x})
+  local err = nn.MSECriterion()({canvas_out, x})
   return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
 end
 
@@ -243,7 +259,7 @@ function fp(data)
   reset_state()
   local next_canvas
   for i = 1, params.seq_length do
-    local x = data
+    local x = data:clone()
     -- local prev_x 
     -- if i == 1 then
     --   prev_x = torch.zeros(params.bsize,1,32,32)
@@ -262,7 +278,7 @@ function bp(data)
   paramdx:zero()
   reset_ds()
   for i = params.seq_length, 1, -1 do
-    local x = data
+    local x = data:clone()
     -- local prev_x 
     -- if i == 1 then
     --   prev_x = torch.zeros(params.bsize,1,32,32)

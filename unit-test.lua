@@ -27,7 +27,7 @@ end
 
 transformer = get_transformer()
 transformer:cuda()
-ret = transformer:forward({torch.rand(256,1,32,32):cuda(), torch.rand(256, 20):cuda()})
+ret = transformer:forward({torch.rand(20,1,32,32):cuda(), torch.rand(20, 20):cuda()})
 image.display({image=ret, nrow=16})
 
 

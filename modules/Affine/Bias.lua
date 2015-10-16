@@ -24,7 +24,6 @@ function Bias:accGradParameters(input, gradOutput, scale)
   --print(gradOutput)
   scale = scale or 1
   -- print("\n\n BIAS")
-
   self.gradBias:add(scale, gradOutput)
   -- print('gradBias after', self.gradBias)
 end

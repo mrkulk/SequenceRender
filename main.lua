@@ -16,18 +16,18 @@ trainLogger = optim.Logger(paths.concat('logs/', 'train.log'))
 testLogger = optim.Logger(paths.concat('logs/', 'test.log'))
 
 params = {
-	bsize = 256,
+	bsize = 120,
 	image_width = 32,
-	template_width = 8,
-	num_acrs = 2,
+	template_width = 10,
+	num_acrs = 3,
 	rnn_size = 100,
 	seq_length=1,
 	layers=2,
 	decay=2,
 	dropout=0,
 	init_weight=0.1,
-	lr=1e-2,
-	max_epochs=4,
+	lr=1e-3,
+	max_epochs=40,
 	max_grad_norm=5
 }
 
@@ -56,7 +56,7 @@ local function unit_test()
 	ret = model:forward({torch.rand(params.bsize, 1, 32, 32):cuda(),
 	    {torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda() },
 		})
-	print(ret)
+	print(ret[3])
 
 	ret = model:backward({torch.rand(params.bsize, 1, 32, 32):cuda(),
 	    {torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda(), torch.zeros(params.bsize, params.rnn_size):cuda() },
@@ -71,7 +71,7 @@ end
 -- unit_test()
 
 
--- setup()
+setup()
 function main()
   print("Network parameters:")
   print(params)
@@ -81,58 +81,65 @@ function main()
   local start_time = torch.tic()
   print("Starting training.")
   print(trainData:size())
-  local cntr = 0
-	for t = 1,trainData:size(),params.bsize do
-		xlua.progress(t, trainData:size())
-    -- create mini batch
-    local inputs = torch.Tensor(params.bsize,1,32,32)
-    local k = 1
-    for i = t,math.min(t+params.bsize-1,trainData:size()) do
-       -- load new sample
-       local sample = trainData[i]
-       local input = sample[1]:clone()
-       local _,target = sample[2]:clone():max(1)
-       inputs[{k,1,{},{}}] = input
-       k = k + 1
-    end
-    inputs = inputs:cuda()
-		local perp, output = fp(inputs)
-		bp(inputs)
-		cutorch.synchronize()
-		collectgarbage()	
+  
+  for epc = 1,params.max_epochs do
+  	print('EPOCH:', epc)
+  	local cntr = 0
+		for t = 1,trainData:size(),params.bsize do
+			xlua.progress(t, trainData:size())
+	    -- create mini batch
+	    local inputs = torch.Tensor(params.bsize,1,32,32)
+	    local k = 1
+	    for i = t,math.min(t+params.bsize-1,trainData:size()) do
+	       -- load new sample
+	       local sample = trainData[i]
+	       local input = sample[1]:clone()
+	       local _,target = sample[2]:clone():max(1)
+	       inputs[{k,1,{},{}}] = input
+	       k = k + 1
+	    end
+	    inputs = inputs:cuda()
+			local perp, output = fp(inputs)
+			bp(inputs)
+			cutorch.synchronize()
+			collectgarbage()	
 
-		if math.fmod(cntr, 1) == 0 then
-			-- testing
-			for tt = 1,1 do--trainData:size(),params.bsize do
-				local inputs = torch.Tensor(params.bsize,1,32,32)
-		    local k = 1
-		    for ii = tt,math.min(tt+params.bsize-1,testData:size()) do
-		       -- load new sample
-		       local sample = testData[ii]
-		       local input = sample[1]:clone()
-		       local _,target = sample[2]:clone():max(1)
-		       inputs[{k,1,{},{}}] = input
-		       k = k + 1
-		    end
-		    inputs = inputs:cuda()
-				local test_perp, test_output = fp(inputs)
+			if math.fmod(cntr, 1) == 0 then
+				-- testing
+				for tt = 1,1 do--trainData:size(),params.bsize do
+					local inputs = torch.Tensor(params.bsize,1,32,32)
+			    local k = 1
+			    for ii = tt,math.min(tt+params.bsize-1,testData:size()) do
+			       -- load new sample
+			       local sample = testData[ii]
+			       local input = sample[1]:clone()
+			       local _,target = sample[2]:clone():max(1)
+			       inputs[{k,1,{},{}}] = input
+			       k = k + 1
+			    end
+			    inputs = inputs:cuda()
+					local test_perp, test_output = fp(inputs)
 
-				-- image.save('pred.png', test_output[1][1])
-				-- image.save('target.png', inputs[1][1])
-	      window1=image.display({image=test_output, nrow=6, legend='Predictions, step : '.. cntr, win=window1})
-	      window2=image.display({image=inputs, nrow=6, legend='Targets, step : '.. cntr, win=window2})
+					-- image.save('pred.png', test_output[1][1])
+					-- image.save('target.png', inputs[1][1])
+		      window1=image.display({image=test_output, nrow=6, legend='Predictions, step : '.. cntr, win=window1})
+		      window2=image.display({image=inputs, nrow=6, legend='Targets, step : '.. cntr, win=window2})
 
-				testLogger:add{['% perp (test set)'] =  test_perp}
-				testLogger:style{['% perp (test set)'] = '-'}
-				testLogger:plot()
+		      -- print(test_output)
+		      -- exit()
+
+					testLogger:add{['% perp (test set)'] =  test_perp}
+					testLogger:style{['% perp (test set)'] = '-'}
+					testLogger:plot()
+				end
 			end
-		end
 
-		cntr = cntr + 1
-		-- trainLogger:add{['% perp (train set)'] =  perp}
-		-- trainLogger:style{['% perp (train set)'] = '-'}
-		-- trainLogger:plot()
+			cntr = cntr + 1
+			-- trainLogger:add{['% perp (train set)'] =  perp}
+			-- trainLogger:style{['% perp (train set)'] = '-'}
+			-- trainLogger:plot()
+		end
 	end
 end
 
--- main()
+main()
