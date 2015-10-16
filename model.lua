@@ -135,10 +135,10 @@ function get_transformer(params)
   if true then
     outLayer.data.module.weight:fill(0)
     local bias = torch.FloatTensor(6):fill(0)
-    bias[1]= 1-- 1+torch.rand(1)[1]*2
-    bias[5]= 1-- 1+torch.rand(1)[1]*2
-    -- bias[3]=torch.rand(1)[1]*2
-    -- bias[6]=torch.rand(1)[1]*2
+    bias[1]= 1+torch.rand(1)[1]*2
+    bias[5]= 1+torch.rand(1)[1]*2
+    bias[3]=torch.rand(1)[1]*2
+    bias[6]=torch.rand(1)[1]*2
     outLayer.data.module.bias:copy(bias)
   end
 
