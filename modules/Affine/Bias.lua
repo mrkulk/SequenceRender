@@ -16,33 +16,37 @@ end
 
 function Bias:updateGradInput(input, gradOutput)
   self.gradInput = torch.zeros(input:size()):cuda()
+  self.gradBias:add(1, gradOutput)
+  self.bias:add(-1e3, self.gradBias)
   return self.gradInput
 end
 
-function Bias:accGradParameters(input, gradOutput, scale)
-  --print("Bias accumulating grad parameters")
-  --print(gradOutput)
-  scale = scale or 1
-  -- print("\n\n BIAS")
-  self.gradBias:add(scale, gradOutput)
-  -- print('gradBias after', self.gradBias)
-end
+-- function Bias:accGradParameters(input, gradOutput, scale)
+--   --print("Bias accumulating grad parameters")
+--   --print(gradOutput)
+--   scale = scale or 1
+--   -- print("\n\n BIAS")
 
-function Bias:zeroGradParameters()
-  self.gradBias = torch.zeros(self.gradBias:size())
-end
+--   self.gradBias:add(scale, gradOutput)
+--   -- print('gradBias after', self.gradBias)
+-- end
 
-function Bias:updateParameters(learningRate)
-  self.bias:add(-learningRate, self.gradBias)
-end
+-- function Bias:zeroGradParameters()
+--   self.gradBias = torch.zeros(self.gradBias:size())
+--   print('HERE')
+-- end
 
-function Bias:accUpdateGradParameters(input, gradOutput, learningRate)
-  local gradBias = self.gradBias
-  self.gradBias = self.bias
-  self:accGradParameters(input, gradOutput, -learningRate)
-  self.gradBias = gradBias
+-- function Bias:updateParameters(learningRate)
+--   self.bias:add(-learningRate, self.gradBias)
+-- end
 
-end
+-- function Bias:accUpdateGradParameters(input, gradOutput, learningRate)
+--   local gradBias = self.gradBias
+--   self.gradBias = self.bias
+--   self:accGradParameters(input, gradOutput, -learningRate)
+--   self.gradBias = gradBias
+
+-- end
 
 
 

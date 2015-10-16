@@ -135,10 +135,10 @@ function get_transformer(params)
   if true then
     outLayer.data.module.weight:fill(0)
     local bias = torch.FloatTensor(6):fill(0)
-    bias[1]= 1+torch.rand(1)[1]*2
-    bias[5]= 1+torch.rand(1)[1]*2
-    bias[3]=torch.rand(1)[1]
-    bias[6]=torch.rand(1)[1]
+    bias[1]= 1-- 1+torch.rand(1)[1]*2
+    bias[5]= 1-- 1+torch.rand(1)[1]*2
+    -- bias[3]=torch.rand(1)[1]*2
+    -- bias[6]=torch.rand(1)[1]*2
     outLayer.data.module.bias:copy(bias)
   end
 
@@ -198,9 +198,9 @@ function create_network(params)
     --intensity for each mem 
 
     local intensity = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))))--nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
-    local mem_intensity = nn.GradScale(1)(nn.IntensityMod()({intensity, mem_out}))
+    local mem_intensity = nn.IntensityMod()({intensity, mem_out})
 
-    sts[i]["enc_out"] = nn.GradScale(1)(nn.Identity()(rnn_i[params.layers]))
+    sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
     sts[i]["transformer"] = get_transformer(params)({mem_intensity, sts[i]["enc_out"]})
     -- adding up all frames on single canvas
     table.insert(canvas, sts[i]["transformer"])
