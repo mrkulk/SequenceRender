@@ -81,18 +81,18 @@ function create_network(params)
 
   --- encoder ---
   local input_image = x-- nn.JoinTable(2)({x,prev_canvas})
-  -- local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 32, 3, 3)(input_image)))
-  -- local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(32, 64, 3, 3)(enc1)))
-  -- local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
+  local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
 
-  local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(x)))
-  local fc1 = nn.Tanh()(nn.Linear(2048, params.rnn_size)(enc1))
+  -- local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(x)))
+  -- local fc1 = nn.Tanh()(nn.Linear(2048, params.rnn_size)(enc1))
   -- local fc1 = nn.Linear(512, params.rnn_size)(enc2)
 
   
-  local rnn_i                = {[0] = nn.Identity()(fc1)}
-  local next_s           = {}
-  local split         = {prev_s:split(2 * params.layers)}
+  local rnn_i = {[0] = nn.Identity()(fc1)}
+  local next_s = {}
+  local split = {prev_s:split(2 * params.layers)}
   for layer_idx = 1, params.layers do
     local prev_c         = split[2 * layer_idx - 1]
     local prev_h         = split[2 * layer_idx]

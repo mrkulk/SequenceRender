@@ -16,7 +16,7 @@ params = {
 	bsize = 120,
 	image_width = 32,
 	template_width = 10,
-	num_acrs = 3,
+	num_acrs = 9,
 	rnn_size = 100,
 	seq_length=1,
 	layers=2,
@@ -24,7 +24,7 @@ params = {
 	dropout=0,
 	init_weight=0.1,
 	lr=5e-3,
-	max_epochs=40,
+	max_epochs=50,
 	max_grad_norm=5
 }
 
@@ -67,8 +67,8 @@ local function unit_test()
 end
 -- unit_test()
 
+entities = setup()
 
-parts = setup()
 function main()
   print("Network parameters:")
   print(params)
@@ -124,7 +124,7 @@ function main()
 
 		      local part_images = {}
 		      for pp = 1,params.num_acrs do
-		      	local p1_images = parts[pp].data.module.bias[1]:reshape(params.template_width, params.template_width)
+		      	local p1_images = entities[pp].data.module.bias[1]:reshape(params.template_width, params.template_width)
 		      	part_images[pp] = p1_images
 		      end
 		      window3 = image.display({image=part_images, nrow=3, legend='Strokes, step:' .. cntr, win=window3})
