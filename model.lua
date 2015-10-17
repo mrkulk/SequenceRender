@@ -126,15 +126,20 @@ function create_network(params)
   local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
 
   local err = nn.MSECriterion()({canvas_out, x})
-  return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out}), parts
+  return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
 end
 
 
 
-function setup()
+function setup(preload)
   print("Creating a RNN LSTM network.")
-  local core_network, parts= create_network(params)
-  core_network:cuda()
+  local core_network
+  if preload then
+    core_network = torch.load('logs/network.t7')
+  else
+    core_network = create_network(params)
+    core_network:cuda()
+  end
   paramx, paramdx = core_network:getParameters()
   model.s = {}
   model.ds = {}
@@ -153,7 +158,7 @@ function setup()
   model.rnns = g_cloneManyTimes(core_network, params.seq_length)
   model.norm_dw = 0
   model.err = transfer_data(torch.zeros(params.seq_length))
-  return parts
+
 end
 
 

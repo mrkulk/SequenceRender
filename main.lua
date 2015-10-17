@@ -66,7 +66,7 @@ local function unit_test()
 end
 -- unit_test()
 
-entities = setup()
+setup(false)
 
 function get_batch(t, data)
   local inputs = torch.Tensor(params.bsize,1,32,32)
@@ -96,7 +96,7 @@ end
 
 function train()
   for epc = 1,params.max_epochs do
-    print('EPOCH:', epc)
+    print('epoch #', epc)
     local cntr = 0
     for t = 1,trainData:size(),params.bsize do
       xlua.progress(t, trainData:size())
@@ -109,6 +109,8 @@ function train()
 
       if math.fmod(cntr, 1) == 0 then
         test()
+        torch.save(params.save .. '/network.t7', model.rnns[1])
+        torch.save(params.save .. '/params.t7', params)
       end
 
       cntr = cntr + 1
@@ -123,15 +125,15 @@ function test()
   for tt = 1,1 do--trainData:size(),params.bsize do
     local inputs = get_batch(tt, testData)
     local test_perp, test_output = fp(inputs)
-    local part_images = {}
-    for pp = 1,params.num_entities do
-      local p1_images = entities[pp].data.module.bias[1]:reshape(params.template_width, params.template_width)
-      part_images[pp] = p1_images
-    end
+    -- local part_images = {}
+    -- for pp = 1,params.num_entities do
+    --   local p1_images = entities[pp].data.module.bias[1]:reshape(params.template_width, params.template_width)
+    --   part_images[pp] = p1_images
+    -- end
     if params.plot then 
       window1=image.display({image=test_output, nrow=6, legend='Predictions', win=window1})
       window2=image.display({image=inputs, nrow=6, legend='Targets', win=window2})
-      window3 = image.display({image=part_images, nrow=3, legend='Strokes', win=window3})
+      -- window3 = image.display({image=part_images, nrow=3, legend='Strokes', win=window3})
     end
     testLogger:add{['% perp (test set)'] =  test_perp}
     testLogger:style{['% perp (test set)'] = '-'}
