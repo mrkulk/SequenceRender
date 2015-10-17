@@ -107,8 +107,8 @@ function train()
       cutorch.synchronize()
       collectgarbage()  
 
-      if math.fmod(cntr, 1) == 0 then
-        test()
+      if math.fmod(cntr, 50000) == 0 then
+        -- test()
         torch.save(params.save .. '/network.t7', model.rnns[1])
         torch.save(params.save .. '/params.t7', params)
       end
