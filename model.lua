@@ -74,7 +74,7 @@ function create_network(params)
   local x = nn.Identity()() --input
   -- local prev_canvas = nn.Identity()()
 
-  local num_acrs = params.num_acrs
+  local num_entities = params.num_entities
   local template_width = params.template_width
   local image_width = params.image_width
   local bsize = params.bsize
@@ -106,7 +106,7 @@ function create_network(params)
   local sts = {}
   local canvas = {}
   local parts = {}
-  for i=1,params.num_acrs do
+  for i=1,params.num_entities do
     sts[i] = {}
     local part = nn.Bias(bsize, template_width*template_width)(x)
     parts[i] = part
