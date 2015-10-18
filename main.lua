@@ -116,6 +116,7 @@ function train()
       cntr = cntr + 1
       trainLogger:add{['% perp (train set)'] =  perp}
       trainLogger:style{['% perp (train set)'] = '-'}
+      -- trainLogger:plot()
     end
   end
 end

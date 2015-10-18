@@ -1,4 +1,3 @@
-
 require 'nngraph'
 require 'cunn'
 require 'cudnn'
@@ -8,6 +7,24 @@ require 'GradScale'
 require 'IntensityMod'
 
 model = {}
+
+
+function extract_node(model,id_name)
+  for i,n in ipairs(model.forwardnodes) do
+    if n.data.module then
+      if  n.data.module.forwardnodes then
+        ret =extract_node(n.data.module, id_name)
+        if ret then
+          return ret
+        end
+      end
+    end
+    if n.data.annotations.name== id_name then
+      return n
+    end
+  end
+end
+
 
 function transfer_data(x)
   return x:cuda()
@@ -41,11 +58,11 @@ function lstm(x, prev_c, prev_h)
 end
 
 
-function get_transformer(params)
+function get_transformer(params, id)
   local x = nn.Identity()()
   local encoder_out = nn.Identity()()
 
-  local outLayer = nn.Linear(params.rnn_size,6)(encoder_out)
+  local outLayer = nn.Linear(params.rnn_size,6)(encoder_out):annotate{name = 'affines_' .. id}
   if true then
     outLayer.data.module.weight:fill(0)
     local bias = torch.FloatTensor(6):fill(0)
@@ -64,7 +81,7 @@ function get_transformer(params)
   local tranet=nn.Transpose({2,3},{3,4})(x)
 
   local spanet = nn.BilinearSamplerBHWD()({tranet, grid})
-  local sp_out = nn.Transpose({3,4},{2,3})(spanet)
+  local sp_out = nn.Transpose({3,4},{2,3})(spanet):annotate{name = 'entity_' .. id}
   return nn.gModule({x, encoder_out}, {sp_out})
 end
 
@@ -118,7 +135,7 @@ function create_network(params)
     local mem_intensity = nn.IntensityMod()({intensity, mem_out})
 
     sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
-    sts[i]["transformer"] = get_transformer(params)({mem_intensity, sts[i]["enc_out"]})
+    sts[i]["transformer"] = get_transformer(params, i)({mem_intensity, sts[i]["enc_out"]})
     -- adding up all frames on single canvas
     table.insert(canvas, sts[i]["transformer"])
   end
