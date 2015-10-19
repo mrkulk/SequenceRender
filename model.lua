@@ -104,6 +104,7 @@ function create_encoder(params)
   local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
   local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
   local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
+
   -- local enc1_high = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
   -- local enc2_high = nn.Tanh()(nn.Linear(2048, 512)(enc1_high))
   -- local affines = nn.Linear(512, params.rnn_size)(enc2_high)
@@ -157,9 +158,9 @@ function create_network(params)
     table.insert(canvas, sts[i]["transformer"])
   end
 
-  local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas)))))
 
-  local err = nn.MSECriterion()({canvas_out, x})
+  local err = nn.BCECriterion()({canvas_out, x})
   return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
 end
 
@@ -251,11 +252,12 @@ function bp(data)
 
     cutorch.synchronize()
   end
-  model.norm_dw = paramdx:norm()
-  if model.norm_dw > params.max_grad_norm then
-    local shrink_factor = params.max_grad_norm / model.norm_dw
-    paramdx:mul(shrink_factor)
-  end
+
+  -- model.norm_dw = paramdx:norm()
+  -- if model.norm_dw > params.max_grad_norm then
+  --   local shrink_factor = params.max_grad_norm / model.norm_dw
+  --   paramdx:mul(shrink_factor)
+  -- end
 
   paramx = rmsprop(paramdx, paramx, config, state)
 

@@ -1,7 +1,6 @@
 -- Tejas D Kulkarni
 -- Usage: th main.lua
 require 'nn'
-require 'Bias'
 require 'optim'
 require 'image'
 require 'dataset-mnist'
@@ -17,18 +16,20 @@ params = lapp[[
    -s,--save          (default "logs")      subdirectory to save logs
    -m,--model         (default "convnet")   type of model tor train: convnet | mlp | linear
    -p,--plot                                plot while training
-   -r,--lr            (default 0.005)       learning rate
-   -i,--max_epochs    (default 50)           maximum nb of iterations per batch, for LBFGS
+   -r,--lr            (default 0.0005)       learning rate
+   -i,--max_epochs    (default 100)           maximum nb of iterations per batch, for LBFGS
    --bsize            (default 120)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
-   --num_entities     (default 3)           number of entities
+   --num_entities     (default 15)           number of entities
    --rnn_size         (default 100)
    --seq_length       (default 1)
    --layers           (default 1)
    --init_weight      (default 0.1)
    --max_grad_norm    (default 5)
 ]]
+BIAS_FACTOR = 5e3
+require 'Bias'
 config = {
     learningRate = params.lr,
     momentumDecay = 0.1,
@@ -119,6 +120,7 @@ function train()
       -- trainLogger:plot()
     end
     params.lr = params.lr * 0.5
+    BIAS_FACTOR = BIAS_FACTOR * 0.1
   end
 end
 

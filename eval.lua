@@ -115,7 +115,7 @@ end
 MAX_IMAGES_TO_DISPLAY = 30
 plot = false
 
-mode = 'train'
+mode = 'test'
 
 if mode == 'train' then
   dat = trainData

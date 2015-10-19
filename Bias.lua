@@ -19,6 +19,6 @@ function Bias:updateGradInput(input, gradOutput)
   -- self.gradBias:add(1, gradOutput)
   self.gradBias = torch.sum(gradOutput, 1)
   local gradBias_rep = torch.repeatTensor(self.gradBias, self.bsize, 1)
-  self.bias:add(-5e3, gradBias_rep)
+  self.bias:add(-BIAS_FACTOR, gradBias_rep)
   return self.gradInput
 end
