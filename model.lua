@@ -58,7 +58,7 @@ function lstm(x, prev_c, prev_h)
 end
 
 
-function get_transformer(params, id)
+function get_transformer(params, id, mode)
   local x = nn.Identity()()
   local encoder_out = nn.Identity()()
 
@@ -66,10 +66,15 @@ function get_transformer(params, id)
   if true then
     outLayer.data.module.weight:fill(0)
     local bias = torch.FloatTensor(6):fill(0)
-    bias[1]= 1+torch.rand(1)[1]*2
-    bias[5]= 1+torch.rand(1)[1]*2
-    bias[3]=torch.rand(1)[1]*2
-    bias[6]=torch.rand(1)[1]*2
+    if mode == 1 then 
+      bias[1]= 1+torch.rand(1)[1]*2
+      bias[5]= 1+torch.rand(1)[1]*2
+      bias[3]=torch.rand(1)[1]*2 - 1--*2
+      bias[6]=torch.rand(1)[1]*2 - 1 --*2
+    else
+      bias[1]= 1
+      bias[5]= 1
+    end
     outLayer.data.module.bias:copy(bias)
   end
 
@@ -85,6 +90,26 @@ function get_transformer(params, id)
   return nn.gModule({x, encoder_out}, {sp_out})
 end
 
+function create_encoder(params)
+  local input_image = nn.Identity()()-- nn.JoinTable(2)({x,prev_canvas})
+  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
+  local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+  -- local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
+  -- local enc2 = nn.Tanh()(nn.Linear(2048, 512)(enc1))
+  -- local enc = nn.Linear(512, params.rnn_size)(enc2)
+
+  local imout = get_transformer(params, 0, 0)({input_image, enc})
+
+  local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
+  local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
+  local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
+  -- local enc1_high = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
+  -- local enc2_high = nn.Tanh()(nn.Linear(2048, 512)(enc1_high))
+  -- local affines = nn.Linear(512, params.rnn_size)(enc2_high)
+
+  return nn.gModule({input_image}, {affines})
+end
 
 function create_network(params)
   local prev_s = nn.Identity()() -- LSTM
@@ -97,17 +122,9 @@ function create_network(params)
   local bsize = params.bsize
 
   --- encoder ---
-  local input_image = x-- nn.JoinTable(2)({x,prev_canvas})
-  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
-  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
-  local fc1 = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+  local enc_params = create_encoder(params)({x})
 
-  -- local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(x)))
-  -- local fc1 = nn.Tanh()(nn.Linear(2048, params.rnn_size)(enc1))
-  -- local fc1 = nn.Linear(512, params.rnn_size)(enc2)
-
-  
-  local rnn_i = {[0] = nn.Identity()(fc1)}
+  local rnn_i = {[0] = nn.Identity()(enc_params)}
   local next_s = {}
   local split = {prev_s:split(2 * params.layers)}
   for layer_idx = 1, params.layers do
@@ -131,11 +148,11 @@ function create_network(params)
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 
-    local intensity = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))))--nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
+    local intensity = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers])))):annotate{name = 'intensity_' .. i}  --nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
     local mem_intensity = nn.IntensityMod()({intensity, mem_out})
 
     sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
-    sts[i]["transformer"] = get_transformer(params, i)({mem_intensity, sts[i]["enc_out"]})
+    sts[i]["transformer"] = get_transformer(params, i, 1)({mem_intensity, sts[i]["enc_out"]})
     -- adding up all frames on single canvas
     table.insert(canvas, sts[i]["transformer"])
   end

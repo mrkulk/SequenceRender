@@ -22,7 +22,7 @@ params = lapp[[
    --bsize            (default 120)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
-   --num_entities           (default 3)           number of acrs
+   --num_entities     (default 3)           number of entities
    --rnn_size         (default 100)
    --seq_length       (default 1)
    --layers           (default 1)
@@ -98,6 +98,8 @@ function train()
   for epc = 1,params.max_epochs do
     print('epoch #', epc)
     local cntr = 0
+    torch.save(params.save .. '/network.t7', model.rnns[1])
+    torch.save(params.save .. '/params.t7', params)
     for t = 1,trainData:size(),params.bsize do
       xlua.progress(t, trainData:size())
       -- create mini batch
@@ -107,10 +109,8 @@ function train()
       cutorch.synchronize()
       collectgarbage()  
 
-      if math.fmod(cntr, 50000) == 0 then
-        -- test()
-        torch.save(params.save .. '/network.t7', model.rnns[1])
-        torch.save(params.save .. '/params.t7', params)
+      if params.plot and math.fmod(cntr, 20) == 0  then 
+        test()
       end
 
       cntr = cntr + 1
@@ -118,6 +118,7 @@ function train()
       trainLogger:style{['% perp (train set)'] = '-'}
       -- trainLogger:plot()
     end
+    params.lr = params.lr * 0.5
   end
 end
 
@@ -126,14 +127,24 @@ function test()
   for tt = 1,1 do--trainData:size(),params.bsize do
     local inputs = get_batch(tt, testData)
     local test_perp, test_output = fp(inputs)
-    -- local part_images = {}
-    -- for pp = 1,params.num_entities do
-    --   local p1_images = entities[pp].data.module.bias[1]:reshape(params.template_width, params.template_width)
-    --   part_images[pp] = p1_images
-    -- end
+    local entity_imgs = {}
+    for pp = 1,params.num_entities do
+      entity_imgs[pp] = extract_node(model.rnns[1], 'entity_' .. pp).data.module.output:double()
+    end
+    local en_imgs = {}
+    counter=1
+    for bb = 1,MAX_IMAGES_TO_DISPLAY do
+      for pp=1,params.num_entities do
+        en_imgs[counter] =entity_imgs[pp][bb]
+        counter = counter + 1 
+      end
+    end
+
     if params.plot then 
-      window1=image.display({image=test_output, nrow=6, legend='Predictions', win=window1})
-      window2=image.display({image=inputs, nrow=6, legend='Targets', win=window2})
+      window1=image.display({image=test_output[{{1,MAX_IMAGES_TO_DISPLAY},{},{},{}}], nrow=1, legend='Predictions', win=window1})
+      window2=image.display({image=inputs[{{1,MAX_IMAGES_TO_DISPLAY},{},{},{}}], nrow=1, legend='Targets', win=window2})
+
+      window3=image.display({image=en_imgs, nrow=params.num_entities, legend='Entities', win=window3})
       -- window3 = image.display({image=part_images, nrow=3, legend='Strokes', win=window3})
     end
     testLogger:add{['% perp (test set)'] =  test_perp}
@@ -142,5 +153,6 @@ function test()
   end
 end
 
+MAX_IMAGES_TO_DISPLAY = 20
 init()
 train()
