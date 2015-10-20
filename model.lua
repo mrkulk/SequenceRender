@@ -6,7 +6,6 @@ require 'stn'
 require 'GradScale'
 require 'IntensityMod'
 require 'LogSumExp'
-require 'GaussianCriterion'
 model = {}
 
 
@@ -94,23 +93,23 @@ end
 
 function create_encoder(params)
   local input_image = nn.Identity()()-- nn.JoinTable(2)({x,prev_canvas})
-  -- local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
-  -- local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
-  -- local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
+  local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
 
-  local enc1 = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
-  local enc2 = nn.ReLU()(nn.Linear(2048, 512)(enc1))
-  local enc = nn.Linear(512, params.rnn_size)(enc2)
+  -- local enc1 = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
+  -- local enc2 = nn.ReLU()(nn.Linear(2048, 512)(enc1))
+  -- local enc = nn.Linear(512, params.rnn_size)(enc2)
 
   local imout = get_transformer(params, 0, 0)({input_image, enc})
 
-  -- local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
-  -- local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
-  -- local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
+  local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
+  local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
+  local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
 
-  local enc1_high = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
-  local enc2_high = nn.ReLU()(nn.Linear(2048, 512)(enc1_high))
-  local affines = nn.Linear(512, params.rnn_size)(enc2_high)
+  -- local enc1_high = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
+  -- local enc2_high = nn.ReLU()(nn.Linear(2048, 512)(enc1_high))
+  -- local affines = nn.Linear(512, params.rnn_size)(enc2_high)
 
   return nn.gModule({input_image}, {affines})
 end

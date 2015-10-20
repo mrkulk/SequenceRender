@@ -18,11 +18,11 @@ params = lapp[[
    -m,--model         (default "convnet")   type of model tor train: convnet | mlp | linear
    -p,--plot                                plot while training
    -r,--lr            (default 0.0005)       learning rate
-   -i,--max_epochs    (default 100)           maximum nb of iterations per batch, for LBFGS
-   --bsize            (default 120)           bsize
+   -i,--max_epochs    (default 200)           maximum nb of iterations per batch, for LBFGS
+   --bsize            (default 100)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
-   --num_entities     (default 10)           number of entities
+   --num_entities     (default 12)           number of entities
    --rnn_size         (default 100)
    --seq_length       (default 1)
    --layers           (default 1)
@@ -128,8 +128,8 @@ function train()
       trainLogger:style{['% perp (train set)'] = '-'}
       -- trainLogger:plot()
     end
-    params.lr = params.lr * 0.5
-    BIAS_FACTOR = BIAS_FACTOR * 0.1
+    params.lr = params.lr * 0.9
+    BIAS_FACTOR = BIAS_FACTOR * 0.8
   end
 end
 
