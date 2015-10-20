@@ -1,13 +1,18 @@
 local Bias, parent = torch.class('nn.Bias', 'nn.Module')
 
-function Bias:__init(bsize, outputSize)
+function Bias:__init(bsize, outputSize, type)
   parent.__init(self)
   self.output = torch.Tensor(bsize, outputSize)
   self.bsize = bsize
-  -- local tmp1 = torch.rand(1,outputSize)
-  local tmp0 = torch.Tensor(outputSize)
-  local tmp1 = randomkit.normal(tmp0,0,1)
-  tmp1 = torch.reshape(tmp1, 1,outputSize)
+  local tmp0,tmp1,tmp2
+  if type == 'rand' then
+    tmp1 = torch.rand(1,outputSize)
+  else 
+    tmp0 = torch.Tensor(outputSize)
+    tmp1 = randomkit.normal(tmp0,0,1)
+    tmp1 = torch.reshape(tmp1, 1,outputSize)
+  end
+
   self.bias = torch.repeatTensor(tmp1, bsize, 1)--torch.rand(bsize, outputSize)
   self.gradBias = torch.zeros(bsize, outputSize)
 end

@@ -43,13 +43,13 @@ testLogger = optim.Logger(paths.concat(params.save .. '/', 'test.log'))
 
 -- create training set and normalize
 trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
--- trainData.data = trainData.data/255
-trainData:normalizeGlobal(mean, std)
+trainData.data = trainData.data/255
+-- trainData:normalizeGlobal(mean, std)
 
 -- create test set and normalize
 testData = mnist.loadTestSet(nbTestingPatches, geometry)
--- testData.data = testData.data/255
-testData:normalizeGlobal(mean, std)
+testData.data = testData.data/255
+-- testData:normalizeGlobal(mean, std)
 
 -- trainData.data[torch.le(trainData.data,0.5)] = 0
 -- trainData.data[torch.ge(trainData.data,0.5)] = 1
@@ -141,23 +141,26 @@ function test()
     local inputs = get_batch(tt, testData)
     local test_perp, test_output = fp(inputs)
     test_err = test_perp + test_err
-    local entity_imgs = {}
+    local entity_imgs = {}; entity_fg_imgs={};
     for pp = 1,params.num_entities do
       entity_imgs[pp] = extract_node(model.rnns[1], 'entity_' .. pp).data.module.output:double()
+      -- entity_fg_imgs[pp] = extract_node(model.rnns[1], 'entity_fg_' .. pp).data.module.output:double()
     end
-    local en_imgs = {}
+    local en_imgs = {}; en_fg_imgs={};
     counter=1
     for bb = 1,MAX_IMAGES_TO_DISPLAY do
       for pp=1,params.num_entities do
         en_imgs[counter] =entity_imgs[pp][bb]
+        -- en_fg_imgs[counter] = entity_fg_imgs[pp][bb]
         counter = counter + 1 
       end
     end
-    if params.plot then 
+    if params.plot then
       window1=image.display({image=test_output[{{1,MAX_IMAGES_TO_DISPLAY},{},{},{}}], nrow=1, legend='Predictions', win=window1})
       window2=image.display({image=inputs[{{1,MAX_IMAGES_TO_DISPLAY},{},{},{}}], nrow=1, legend='Targets', win=window2})
 
       window3=image.display({image=en_imgs, nrow=params.num_entities, legend='Entities', win=window3})
+      -- window4=image.display({image=en_fg_imgs, nrow=params.num_entities, legend='FG', win=window4})
       -- window3 = image.display({image=part_images, nrow=3, legend='Strokes', win=window3})
     end
   end

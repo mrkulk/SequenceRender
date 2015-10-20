@@ -6,6 +6,7 @@ end
 
 -- input format : {intensities, images}
 function IntensityMod:updateOutput(input)
+	-- print(input[1]:min(), input[2]:min())
 	self.output = input[2]:clone()
 	for i=1,input[1]:size(1) do 
 		self.output[i] = self.output[i] * input[1][i][1]

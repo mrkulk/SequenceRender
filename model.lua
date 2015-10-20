@@ -6,6 +6,7 @@ require 'stn'
 require 'GradScale'
 require 'IntensityMod'
 require 'LogSumExp'
+require 'componentMul'
 model = {}
 
 
@@ -58,9 +59,13 @@ function lstm(x, prev_c, prev_h)
 end
 
 
-function get_transformer(params, id, mode)
-  local x = nn.Identity()()
-  local encoder_out = nn.Identity()()
+function get_transformer(x, fg, encoder_out, params, id, mode)
+  -- local x = nn.Identity()()
+  -- local fg
+  -- if mode == 1 then
+  --   fg = nn.Identity()()
+  -- end
+  -- local encoder_out = nn.Identity()()
 
   local inp = encoder_out --nn.Dropout()(encoder_out)
   local outLayer = nn.Linear(params.rnn_size,6)(inp):annotate{name = 'affines_' .. id}
@@ -81,14 +86,22 @@ function get_transformer(params, id, mode)
 
   -- there we generate the grids
   -- local affines = nn.PrintModule("AFFINE:")(outLayer)
-  local grid = nn.AffineGridGeneratorBHWD(32,32)(nn.View(2,3)(outLayer))
-
+  local grid = nn.AffineGridGeneratorBHWD(32,32)(nn.View(2,3)(nn.Identity()(outLayer)))
   -- first branch is there to transpose inputs to BHWD, for the bilinear sampler
   local tranet=nn.Transpose({2,3},{3,4})(x)
-
   local spanet = nn.BilinearSamplerBHWD()({tranet, grid})
   local sp_out = nn.Transpose({3,4},{2,3})(spanet):annotate{name = 'entity_' .. id}
-  return nn.gModule({x, encoder_out}, {sp_out})
+
+  if mode == 1 then
+    -- transforming fg/bg template with same params as above
+    local fg_grid = nn.AffineGridGeneratorBHWD(32,32)(nn.View(2,3)(nn.Identity()(outLayer)))
+    local fg_tranet=nn.Transpose({2,3},{3,4})(fg)
+    local fg_spanet = nn.BilinearSamplerBHWD()({fg_tranet, fg_grid})
+    local fg_template = nn.Transpose({3,4},{2,3})(fg_spanet):annotate{name = 'entity_fg_' .. id}
+    return sp_out, fg_template--nn.gModule({x, fg, encoder_out}, {sp_out, fg_template})
+  else
+    return sp_out --nn.gModule({x, encoder_out}, {sp_out})
+  end
 end
 
 function create_encoder(params)
@@ -101,7 +114,7 @@ function create_encoder(params)
   -- local enc2 = nn.ReLU()(nn.Linear(2048, 512)(enc1))
   -- local enc = nn.Linear(512, params.rnn_size)(enc2)
 
-  local imout = get_transformer(params, 0, 0)({input_image, enc})
+  local imout = get_transformer(input_image, 0, enc, params, 0, 0) -- get_transformer(params, 0, 0)({input_image, enc})
 
   local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
   local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
@@ -142,22 +155,29 @@ function create_network(params)
 
   local sts = {}
   local canvas = {}
-  local parts = {}
   for i=1,params.num_entities do
     sts[i] = {}
-    local part = nn.Bias(bsize, template_width*template_width)(x)
-    parts[i] = part
+    local part = nn.ReLU()(nn.Bias(bsize, template_width*template_width, 'rand')(x))
+    local part_fg = nn.Sigmoid()(nn.Bias(bsize, template_width*template_width,'rand')(x))--nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
+    -- local part_fg = nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
+    local part_fg_mem = nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part_fg))
     local mem = nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part))
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 
     local intensity = nn.MulConstant(0.1)(nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.MulConstant(10)(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers])))))):annotate{name = 'intensity_' .. i}  --nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
+
     local mem_intensity = nn.IntensityMod()({intensity, mem_out})
 
     sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
-    sts[i]["transformer"] = get_transformer(params, i, 1)({mem_intensity, sts[i]["enc_out"]})
+    
+    local fg_template
+    sts[i]["transformer"], fg_template = get_transformer(mem_intensity, part_fg_mem, sts[i]["enc_out"], params, i, 1) 
+
+    local entity_contribution = sts[i]["transformer"]--nn.componentMul()({sts[i]["transformer"], fg_template})
+
     -- adding up all frames on single canvas
-    local entity_contribution = sts[i]["transformer"]
+    -- local entity_contribution = sts[i]["transformer"]
     -- local entity_contribution = nn.Exp()(nn.MulConstant(100)(sts[i]["transformer"]))
     table.insert(canvas, entity_contribution)
   end
