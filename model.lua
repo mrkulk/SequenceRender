@@ -5,7 +5,8 @@ require 'rmsprop'
 require 'stn'
 require 'GradScale'
 require 'IntensityMod'
-
+require 'LogSumExp'
+require 'GaussianCriterion'
 model = {}
 
 
@@ -62,7 +63,8 @@ function get_transformer(params, id, mode)
   local x = nn.Identity()()
   local encoder_out = nn.Identity()()
 
-  local outLayer = nn.Linear(params.rnn_size,6)(encoder_out):annotate{name = 'affines_' .. id}
+  local inp = encoder_out --nn.Dropout()(encoder_out)
+  local outLayer = nn.Linear(params.rnn_size,6)(inp):annotate{name = 'affines_' .. id}
   if true then
     outLayer.data.module.weight:fill(0)
     local bias = torch.FloatTensor(6):fill(0)
@@ -92,22 +94,23 @@ end
 
 function create_encoder(params)
   local input_image = nn.Identity()()-- nn.JoinTable(2)({x,prev_canvas})
-  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
-  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
-  local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
-  -- local enc1 = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
-  -- local enc2 = nn.Tanh()(nn.Linear(2048, 512)(enc1))
-  -- local enc = nn.Linear(512, params.rnn_size)(enc2)
+  -- local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  -- local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
+  -- local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
+
+  local enc1 = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
+  local enc2 = nn.ReLU()(nn.Linear(2048, 512)(enc1))
+  local enc = nn.Linear(512, params.rnn_size)(enc2)
 
   local imout = get_transformer(params, 0, 0)({input_image, enc})
 
-  local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
-  local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
-  local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
+  -- local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
+  -- local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
+  -- local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
 
-  -- local enc1_high = nn.Tanh()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
-  -- local enc2_high = nn.Tanh()(nn.Linear(2048, 512)(enc1_high))
-  -- local affines = nn.Linear(512, params.rnn_size)(enc2_high)
+  local enc1_high = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
+  local enc2_high = nn.ReLU()(nn.Linear(2048, 512)(enc1_high))
+  local affines = nn.Linear(512, params.rnn_size)(enc2_high)
 
   return nn.gModule({input_image}, {affines})
 end
@@ -131,7 +134,7 @@ function create_network(params)
   for layer_idx = 1, params.layers do
     local prev_c         = split[2 * layer_idx - 1]
     local prev_h         = split[2 * layer_idx]
-    local dropped        = nn.Dropout(params.dropout)(rnn_i[layer_idx - 1])
+    local dropped        = rnn_i[layer_idx - 1]
     local next_c, next_h = lstm(dropped, prev_c, prev_h)
     table.insert(next_s, next_c)
     table.insert(next_s, next_h)
@@ -145,22 +148,48 @@ function create_network(params)
     sts[i] = {}
     local part = nn.Bias(bsize, template_width*template_width)(x)
     parts[i] = part
-    local mem = nn.SpatialUpSamplingNearest(4)(nn.Reshape(1,template_width,template_width)(part))
+    local mem = nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part))
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 
-    local intensity = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers])))):annotate{name = 'intensity_' .. i}  --nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
+    local intensity = nn.MulConstant(0.1)(nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.MulConstant(10)(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers])))))):annotate{name = 'intensity_' .. i}  --nn.Sigmoid()(nn.Linear(params.rnn_size, 1)(rnn_i[params.layers]))
     local mem_intensity = nn.IntensityMod()({intensity, mem_out})
 
     sts[i]["enc_out"] = nn.Identity()(rnn_i[params.layers])
     sts[i]["transformer"] = get_transformer(params, i, 1)({mem_intensity, sts[i]["enc_out"]})
     -- adding up all frames on single canvas
-    table.insert(canvas, sts[i]["transformer"])
+    local entity_contribution = sts[i]["transformer"]
+    -- local entity_contribution = nn.Exp()(nn.MulConstant(100)(sts[i]["transformer"]))
+    table.insert(canvas, entity_contribution)
   end
 
-  local canvas_out = nn.Sigmoid()(nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas)))))
 
-  local err = nn.BCECriterion()({canvas_out, x})
+  -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  -- local err = nn.MSECriterion()({canvas_out, x})
+
+  local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  local err = nn.MSECriterion()({canvas_out, x})
+  
+  -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.Sigmoid()(nn.JoinTable(2)(canvas)))))
+  -- local err = nn.BCECriterion()({canvas_out, x})
+
+  -- local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(0.01)(nn.Log()(nn.Sum(2)(nn.JoinTable(2)(canvas)))))
+
+  -- local factor = 100
+  -- local t0 = nn.MulConstant(factor)(nn.JoinTable(2)(canvas))
+  -- local t1 = nn.Reshape(params.num_entities, image_width, image_width)(t0)
+  -- local t2 = nn.LogSumExp()(t1)
+  -- local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1/factor)(t2))
+  -- local err = nn.MSECriterion()({canvas_out, x})
+
+  -- local factor = 100
+  -- local t0 = nn.MulConstant(factor)(nn.JoinTable(2)(canvas))
+  -- local t1 = nn.Reshape(params.num_entities, image_width, image_width)(t0)
+  -- local t2 = nn.Log()(nn.Sum(2)(nn.Exp()(t1)))
+  -- local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1/factor)(t2))
+  -- local err = nn.MSECriterion()({canvas_out, x})
+
+
   return nn.gModule({x,prev_s}, {err, nn.Identity()(next_s), canvas_out})
 end
 

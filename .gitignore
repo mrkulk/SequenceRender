@@ -1,6 +1,6 @@
 tmp
 notebooks
-logs
+logs*
 slurm*
 mnist.t7
 modules

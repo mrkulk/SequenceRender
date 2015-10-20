@@ -15,6 +15,7 @@ end
 
 function IntensityMod:updateGradInput(input, gradOutput)
 	-- print(gradOutput:sum())
+	-- print(input[1])
 	self.gradInput = {torch.Tensor(input[1]:size()):zero():cuda(), torch.Tensor(input[2]:size()):zero():cuda()} 
 	for i=1,input[1]:size(1) do 
 		self.gradInput[1][i] = torch.cmul(input[2][i], gradOutput[i]):sum()

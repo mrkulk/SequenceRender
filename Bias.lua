@@ -4,7 +4,10 @@ function Bias:__init(bsize, outputSize)
   parent.__init(self)
   self.output = torch.Tensor(bsize, outputSize)
   self.bsize = bsize
-  local tmp1 = torch.rand(1,outputSize)
+  -- local tmp1 = torch.rand(1,outputSize)
+  local tmp0 = torch.Tensor(outputSize)
+  local tmp1 = randomkit.normal(tmp0,0,1)
+  tmp1 = torch.reshape(tmp1, 1,outputSize)
   self.bias = torch.repeatTensor(tmp1, bsize, 1)--torch.rand(bsize, outputSize)
   self.gradBias = torch.zeros(bsize, outputSize)
 end
