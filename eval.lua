@@ -14,8 +14,11 @@ require 'sys'
 require 'pl'
 matio = require 'matio'
 
+src = 'slurm_logs/sequence_render__num_entities_20_lr_0.005'
+
 plot = false
-params = torch.load('logs/params.t7')
+-- params = torch.load(src .. '/params.t7')
+params = torch.load(src .. '/params.t7')
 
 config = {
     learningRate = params.lr,
@@ -27,15 +30,17 @@ require 'model'
 
 -- create training set and normalize
 trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
-trainData:normalizeGlobal(mean, std)
+trainData.data = trainData.data/255
+-- trainData:normalizeGlobal(mean, std)
 
 -- create test set and normalize
 testData = mnist.loadTestSet(nbTestingPatches, geometry)
-testData:normalizeGlobal(mean, std)
+testData.data = testData.data/255
+-- testData:normalizeGlobal(mean, std)
 
 testLogger = optim.Logger(paths.concat(params.save .. '/', 'test.log'))
 
-setup(true)
+setup(true, src)
 
 function get_batch(t, data)
   local inputs = torch.Tensor(params.bsize,1,32,32)
@@ -64,6 +69,7 @@ function init()
 end
 
 function run(data, mode)
+  max_num = data:size()
   -- testing
   -- for tt = 1,1 do--trainData:size(),params.bsize do
   bid = 1
@@ -115,21 +121,11 @@ end
 MAX_IMAGES_TO_DISPLAY = 30
 plot = false
 
-mode = 'test'
-
-if mode == 'train' then
-  dat = trainData
-else
-  dat = testData
-end
-
 if plot then
   max_num = 1
-else
-  max_num = dat:size()
 end
 init()
-run(dat, mode)
-
+run(trainData, 'train')
+run(testData, 'test')
 
 -- print(extract_node(model.rnns[1], 'entity_1').data.module.output[1][1])

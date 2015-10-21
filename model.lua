@@ -218,11 +218,11 @@ end
 
 
 
-function setup(preload)
+function setup(preload, path)
   print("Creating a RNN LSTM network.")
   local core_network
   if preload then
-    core_network = torch.load('logs/network.t7')
+    core_network = torch.load(path .. '/network.t7')
   else
     core_network = create_network(params)
     core_network:cuda()
