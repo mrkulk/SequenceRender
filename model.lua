@@ -71,17 +71,17 @@ function get_transformer(x, fg, encoder_out, params, id, mode)
   local outLayer = nn.Linear(params.rnn_size,6)(inp):annotate{name = 'affines_' .. id}
   if true then
     outLayer.data.module.weight:fill(0)
-    local bias = torch.FloatTensor(6):fill(0)
+    local Entity = torch.FloatTensor(6):fill(0)
     if mode == 1 then 
-      bias[1]= 1+torch.rand(1)[1]*2
-      bias[5]= 1+torch.rand(1)[1]*2
-      bias[3]=torch.rand(1)[1]*2 - 1--*2
-      bias[6]=torch.rand(1)[1]*2 - 1 --*2
+      Entity[1]= 1+torch.rand(1)[1]*2
+      Entity[5]= 1+torch.rand(1)[1]*2
+      Entity[3]=torch.rand(1)[1]*2 - 1--*2
+      Entity[6]=torch.rand(1)[1]*2 - 1 --*2
     else
-      bias[1]= 1
-      bias[5]= 1
+      Entity[1]= 1
+      Entity[5]= 1
     end
-    outLayer.data.module.bias:copy(bias)
+    outLayer.data.module.bias:copy(Entity)
   end
 
   -- there we generate the grids
@@ -157,11 +157,13 @@ function create_network(params)
   local canvas = {}
   for i=1,params.num_entities do
     sts[i] = {}
-    local part = nn.ReLU()(nn.Bias(bsize, template_width*template_width, 'rand')(x))
-    local part_fg = nn.Sigmoid()(nn.Bias(bsize, template_width*template_width,'rand')(x))--nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
+    local part = nn.ReLU()(nn.Entity(bsize, template_width*template_width, 'rand')(x))
+    -- local part = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Entity(bsize, template_width*template_width, 'rand')(x))))
+
+    local part_fg = nn.Sigmoid()(nn.Entity(bsize, template_width*template_width,'rand')(x))--nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
     -- local part_fg = nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
     local part_fg_mem = nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part_fg))
-    local mem = nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part))
+    local mem = nn.Reshape(1,template_width,template_width)(part)--nn.SpatialUpSamplingNearest(3)(nn.Reshape(1,template_width,template_width)(part))
     local mem_out = mem--nn.Sigmoid()(mem)
     --intensity for each mem 
 
@@ -174,7 +176,8 @@ function create_network(params)
     local fg_template
     sts[i]["transformer"], fg_template = get_transformer(mem_intensity, part_fg_mem, sts[i]["enc_out"], params, i, 1) 
 
-    local entity_contribution = sts[i]["transformer"]--nn.componentMul()({sts[i]["transformer"], fg_template})
+    local entity_contribution = sts[i]["transformer"]
+    -- local entity_contribution = nn.componentMul()({sts[i]["transformer"], fg_template})
 
     -- adding up all frames on single canvas
     -- local entity_contribution = sts[i]["transformer"]
@@ -183,12 +186,13 @@ function create_network(params)
   end
 
 
-  -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
-  -- local err = nn.MSECriterion()({canvas_out, x})
-
   local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
   local err = nn.MSECriterion()({canvas_out, x})
   
+
+  -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  -- local err = nn.MSECriterion()({canvas_out, x})
+
   -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.Sigmoid()(nn.JoinTable(2)(canvas)))))
   -- local err = nn.BCECriterion()({canvas_out, x})
 

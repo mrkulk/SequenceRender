@@ -22,15 +22,15 @@ params = lapp[[
    --bsize            (default 100)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
-   --num_entities     (default 12)           number of entities
+   --num_entities     (default 20)           number of entities
    --rnn_size         (default 100)
    --seq_length       (default 1)
    --layers           (default 1)
    --init_weight      (default 0.1)
    --max_grad_norm    (default 5)
 ]]
-BIAS_FACTOR = 5e3
-require 'Bias'
+Entity_FACTOR = 5e3
+require 'Entity'
 config = {
     learningRate = params.lr,
     momentumDecay = 0.1,
@@ -128,8 +128,8 @@ function train()
       trainLogger:style{['% perp (train set)'] = '-'}
       -- trainLogger:plot()
     end
-    params.lr = params.lr * 0.9
-    BIAS_FACTOR = BIAS_FACTOR * 0.8
+    -- params.lr = params.lr * 0.9
+    -- Entity_FACTOR = Entity_FACTOR * 0.8
   end
 end
 
@@ -166,7 +166,7 @@ function test()
   end
   testLogger:add{['% perp (test set)'] =  test_err}
   testLogger:style{['% perp (test set)'] = '-'}
-  testLogger:plot()
+  -- testLogger:plot()
   -- g_enable_dropout(model.rnns)
 end
 

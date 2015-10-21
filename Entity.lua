@@ -1,6 +1,6 @@
-local Bias, parent = torch.class('nn.Bias', 'nn.Module')
+local Entity, parent = torch.class('nn.Entity', 'nn.Module')
 
-function Bias:__init(bsize, outputSize, type)
+function Entity:__init(bsize, outputSize, type)
   parent.__init(self)
   self.output = torch.Tensor(bsize, outputSize)
   self.bsize = bsize
@@ -17,16 +17,16 @@ function Bias:__init(bsize, outputSize, type)
   self.gradBias = torch.zeros(bsize, outputSize)
 end
 
-function Bias:updateOutput(input)
+function Entity:updateOutput(input)
   self.output:copy(self.bias)
   return self.output
 end
 
-function Bias:updateGradInput(input, gradOutput)
+function Entity:updateGradInput(input, gradOutput)
   self.gradInput = torch.zeros(input:size()):cuda()
   -- self.gradBias:add(1, gradOutput)
   self.gradBias = torch.sum(gradOutput, 1)
   local gradBias_rep = torch.repeatTensor(self.gradBias, self.bsize, 1)
-  self.bias:add(-BIAS_FACTOR, gradBias_rep)
+  self.bias:add(-Entity_FACTOR, gradBias_rep)
   return self.gradInput
 end

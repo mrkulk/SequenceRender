@@ -1,7 +1,7 @@
 -- Tejas D Kulkarni
 -- Usage: th main.lua
 require 'nn'
-require 'Bias'
+require 'Entity'
 require 'optim'
 require 'image'
 require 'dataset-mnist'
