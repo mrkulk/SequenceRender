@@ -51,6 +51,10 @@ testData = mnist.loadTestSet(nbTestingPatches, geometry)
 testData.data = testData.data/255
 -- testData:normalizeGlobal(mean, std)
 
+fulldata = torch.zeros(trainData.data:size(1) + testData.data:size(1), 1, 32,32)
+fulldata[{{1,trainData.data:size(1)},{},{},{}}] = trainData.data:clone()
+fulldata[{{trainData.data:size(1)+1,testData.data:size(1)+trainData.data:size(1) },{},{},{}}] = testData.data:clone()
+
 -- trainData.data[torch.le(trainData.data,0.5)] = 0
 -- trainData.data[torch.ge(trainData.data,0.5)] = 1
 
@@ -81,11 +85,11 @@ setup(false)
 function get_batch(t, data)
   local inputs = torch.Tensor(params.bsize,1,32,32)
   local k = 1
-  for i = t,math.min(t+params.bsize-1,data:size()) do
+  for i = t,math.min(t+params.bsize-1,data:size(1)) do
      -- load new sample
      local sample = data[i]
      local input = sample[1]:clone()
-     local _,target = sample[2]:clone():max(1)
+     -- local _,target = sample[2]:clone():max(1)
      inputs[{k,1,{},{}}] = input
      k = k + 1
   end
@@ -101,7 +105,7 @@ function init()
   local beginning_time = torch.tic()
   local start_time = torch.tic()
   print("Starting training.")
-  print(trainData:size())
+  print(fulldata:size())
 end
 
 function train()
@@ -110,18 +114,18 @@ function train()
     local cntr = 0
     torch.save(params.save .. '/network.t7', model.rnns[1])
     torch.save(params.save .. '/params.t7', params)
-    for t = 1,trainData:size(),params.bsize do
-      xlua.progress(t, trainData:size())
+    for t = 1,fulldata:size(1),params.bsize do
+      xlua.progress(t, fulldata:size(1))
       -- create mini batch
-      local inputs = get_batch(t, trainData)
+      local inputs = get_batch(t, fulldata)
       local perp, output = fp(inputs)
       bp(inputs)
       cutorch.synchronize()
       collectgarbage()  
 
-      if params.plot and math.fmod(cntr, 20) == 0  then 
-        test()
-      end
+      -- if params.plot and math.fmod(cntr, 20) == 0  then 
+      --   test()
+      -- end
 
       cntr = cntr + 1
       trainLogger:add{['% perp (train set)'] =  perp}
