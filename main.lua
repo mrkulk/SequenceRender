@@ -28,6 +28,7 @@ params = lapp[[
    --layers           (default 1)
    --init_weight      (default 0.1)
    --max_grad_norm    (default 5)
+   --dataset          (default "mnist")
 ]]
 Entity_FACTOR = 5e3
 require 'Entity'
@@ -38,29 +39,35 @@ config = {
 }
 require 'model'
 -- torch.manualSeed(1)
+
 trainLogger = optim.Logger(paths.concat(params.save .. '/', 'train.log'))
 testLogger = optim.Logger(paths.concat(params.save .. '/', 'test.log'))
 
--- create training set and normalize
-trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
-trainData.data = trainData.data/255
--- trainData:normalizeGlobal(mean, std)
+if params.dataset == "omniglot" then
+  trainData = torch.load('dataset/omniglot_train_imgs.t7')
+  testData = torch.load('dataset/omniglot_test_imgs.t7')
 
--- create test set and normalize
-testData = mnist.loadTestSet(nbTestingPatches, geometry)
-testData.data = testData.data/255
--- testData:normalizeGlobal(mean, std)
-
-fulldata = torch.zeros(trainData.data:size(1) + testData.data:size(1), 1, 32,32)
-fulldata[{{1,trainData.data:size(1)},{},{},{}}] = trainData.data:clone()
-fulldata[{{trainData.data:size(1)+1,testData.data:size(1)+trainData.data:size(1) },{},{},{}}] = testData.data:clone()
-
--- trainData.data[torch.le(trainData.data,0.5)] = 0
--- trainData.data[torch.ge(trainData.data,0.5)] = 1
-
--- testData.data[torch.le(testData.data,0.5)] = 0
--- testData.data[torch.ge(testData.data,0.5)] = 1
-
+  fulldata = torch.zeros(trainData:size(1) + testData:size(1), 1, 32,32)
+  fulldata[{{1,trainData:size(1)},{},{},{}}] = trainData:clone()
+  fulldata[{{trainData:size(1)+1,testData:size(1)+trainData:size(1) },{},{},{}}] = testData:clone()
+else
+  --single mnist
+  -- create training set and normalize
+  trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
+  trainData.data = trainData.data/255
+  -- trainData:normalizeGlobal(mean, std)
+  -- create test set and normalize
+  testData = mnist.loadTestSet(nbTestingPatches, geometry)
+  testData.data = testData.data/255
+  -- testData:normalizeGlobal(mean, std)
+  fulldata = torch.zeros(trainData.data:size(1) + testData.data:size(1), 1, 32,32)
+  fulldata[{{1,trainData.data:size(1)},{},{},{}}] = trainData.data:clone()
+  fulldata[{{trainData.data:size(1)+1,testData.data:size(1)+trainData.data:size(1) },{},{},{}}] = testData.data:clone()
+  -- trainData.data[torch.le(trainData.data,0.5)] = 0
+  -- trainData.data[torch.ge(trainData.data,0.5)] = 1
+  -- testData.data[torch.le(testData.data,0.5)] = 0
+  -- testData.data[torch.ge(testData.data,0.5)] = 1
+end
 
 local function unit_test()
   model = create_network(params)
@@ -123,9 +130,9 @@ function train()
       cutorch.synchronize()
       collectgarbage()  
 
-      -- if params.plot and math.fmod(cntr, 20) == 0  then 
-      --   test()
-      -- end
+      if params.plot and math.fmod(cntr, 20) == 0  then 
+        test()
+      end
 
       cntr = cntr + 1
       trainLogger:add{['% perp (train set)'] =  perp}

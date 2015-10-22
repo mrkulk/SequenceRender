@@ -75,8 +75,13 @@ function get_transformer(x, fg, encoder_out, params, id, mode)
     if mode == 1 then 
       Entity[1]= 1+torch.rand(1)[1]*2
       Entity[5]= 1+torch.rand(1)[1]*2
-      Entity[3]=torch.rand(1)[1]*2 - 1--*2
-      Entity[6]=torch.rand(1)[1]*2 - 1 --*2
+      if params.dataset == "omniglot" then
+        Entity[3]=torch.rand(1)[1]*3 - 1.5--*2
+        Entity[6]=torch.rand(1)[1]*3 - 1.5 --*2
+      else
+        Entity[3]=torch.rand(1)[1]*2 - 1--*2
+        Entity[6]=torch.rand(1)[1]*2 - 1 --*2
+      end
     else
       Entity[1]= 1
       Entity[5]= 1
@@ -157,7 +162,13 @@ function create_network(params)
   local canvas = {}
   for i=1,params.num_entities do
     sts[i] = {}
-    local part = nn.ReLU()(nn.Entity(bsize, template_width*template_width, 'rand')(x))
+    local part;
+    if params.dataset == "omniglot" then
+      -- part = nn.Entity(bsize, template_width*template_width, 'rand')(x)
+      part = nn.ReLU()(nn.Entity(bsize, template_width*template_width, 'rand')(x))
+    else
+      part = nn.ReLU()(nn.Entity(bsize, template_width*template_width, 'rand')(x))
+    end
     -- local part = nn.Log()(nn.AddConstant(1)(nn.Exp()(nn.Entity(bsize, template_width*template_width, 'rand')(x))))
 
     local part_fg = nn.Sigmoid()(nn.Entity(bsize, template_width*template_width,'rand')(x))--nn.Sigmoid()(nn.Linear(params.rnn_size, template_width*template_width)(rnn_i[params.layers]))
@@ -186,7 +197,12 @@ function create_network(params)
   end
 
 
-  local canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  local canvas_out;
+  if params.dataset == "omniglot" then
+    canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  else
+    canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+  end
   local err = nn.MSECriterion()({canvas_out, x})
   
 

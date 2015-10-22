@@ -14,7 +14,7 @@ require 'sys'
 require 'pl'
 matio = require 'matio'
 
-src = 'slurm_logs/sequence_render__num_entities_20_lr_0.005'
+src = 'slurm_logs/sr__num_entities_10_lr_0.005'
 
 plot = false
 -- params = torch.load(src .. '/params.t7')
