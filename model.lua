@@ -1,6 +1,6 @@
 require 'nngraph'
 require 'cunn'
-require 'cudnn'
+-- require 'cudnn'
 require 'rmsprop'
 require 'stn'
 require 'GradScale'
@@ -106,8 +106,8 @@ end
 
 function create_encoder(params)
   local input_image = nn.Identity()()-- nn.JoinTable(2)({x,prev_canvas})
-  local enc1 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(input_image)))
-  local enc2 = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1)))
+  local enc1 = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  local enc2 = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(64, 64, 3, 3)(enc1)))
   local enc = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2)))
 
   -- local enc1 = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(input_image)))
@@ -116,8 +116,8 @@ function create_encoder(params)
 
   local imout = get_transformer(input_image, 0, enc, params, 0, 0) -- get_transformer(params, 0, 0)({input_image, enc})
 
-  local enc1_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(1, 64, 3, 3)(imout)))
-  local enc2_high = cudnn.SpatialMaxPooling(2,2)(nn.ReLU()(cudnn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
+  local enc1_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(1, 64, 3, 3)(imout)))
+  local enc2_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
   local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
 
   -- local enc1_high = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
