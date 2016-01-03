@@ -10,16 +10,16 @@ if not os.path.exists("slurm_scripts"):
 # Don't give it a `save` name - that gets generated for you
 jobs = [
          {
-            'num_entities': 3
-         },
-        {
-            'num_entities': 9
+            'num_entities': 10
          },
         {
             'num_entities': 15
          },
         {
-            'num_entities': 18
+            'num_entities': 30
+         },
+        {
+            'num_entities': 45
          },
 ]
 
@@ -43,7 +43,7 @@ for job in jobs:
 
     print ("th main.lua" + flagstring)
     if False:
-        os.system("sbatch -N 1 -c 2 --gres=gpu:1 --time=1-00:00:00 slurm_scripts/" + jobname + ".slurm &")
+        os.system("sbatch -N 1 -c 2 --gres=gpu:1 --time=5-00:00:00 slurm_scripts/" + jobname + ".slurm &")
 
 
 

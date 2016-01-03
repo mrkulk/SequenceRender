@@ -19,7 +19,7 @@ params = lapp[[
    -p,--plot                                plot while training
    -r,--lr            (default 0.0005)       learning rate
    -i,--max_epochs    (default 200)           maximum nb of iterations per batch, for LBFGS
-   --bsize            (default 100)           bsize
+   --bsize            (default 64)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
    --num_entities     (default 10)           number of entities
