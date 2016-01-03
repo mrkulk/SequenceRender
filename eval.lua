@@ -14,7 +14,7 @@ require 'sys'
 require 'pl'
 matio = require 'matio'
 
-src = 'slurm_logs/sr__num_entities_10_lr_0.005'
+src = 'slurm_logs/omni__num_entities_30_dataset_omniglot'
 
 plot = false
 -- params = torch.load(src .. '/params.t7')
@@ -28,17 +28,32 @@ config = {
 
 require 'model'
 
--- create training set and normalize
-trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
-trainData.data = trainData.data/255
--- trainData:normalizeGlobal(mean, std)
-
--- create test set and normalize
-testData = mnist.loadTestSet(nbTestingPatches, geometry)
-testData.data = testData.data/255
--- testData:normalizeGlobal(mean, std)
-
 testLogger = optim.Logger(paths.concat(params.save .. '/', 'test.log'))
+
+if params.dataset == "omniglot" then
+  testData = {}; trainData = {}
+
+  trainData[1] = torch.load('dataset/omniglot_train_imgs.t7')
+  trainData[2] = torch.load('dataset/omniglot_train_labels.t7')
+
+  testData[1] = torch.load('dataset/omniglot_test_imgs.t7')
+  testData[2] = torch.load('dataset/omniglot_test_labels.t7')
+
+else
+  --single mnist
+  -- create training set and normalize
+  trainData = mnist.loadTrainSet(nbTrainingPatches, geometry)
+  trainData.data = trainData.data/255
+  -- trainData:normalizeGlobal(mean, std)
+  -- create test set and normalize
+  testData = mnist.loadTestSet(nbTestingPatches, geometry)
+  testData.data = testData.data/255
+  -- testData:normalizeGlobal(mean, std)
+  -- trainData.data[torch.le(trainData.data,0.5)] = 0
+  -- trainData.data[torch.ge(trainData.data,0.5)] = 1
+  -- testData.data[torch.le(testData.data,0.5)] = 0
+  -- testData.data[torch.ge(testData.data,0.5)] = 1
+end
 
 setup(true, src)
 
@@ -46,13 +61,18 @@ function get_batch(t, data)
   local inputs = torch.Tensor(params.bsize,1,32,32)
   local targets = torch.Tensor(params.bsize)
   local k = 1
-  for i = t,math.min(t+params.bsize-1,data:size()) do
+  for i = t,math.min(t+params.bsize-1,data[1]:size()[1]) do
      -- load new sample
-     local sample = data[i]
-     local input = sample[1]:clone()
-     local _,target = sample[2]:clone():max(1)
-     inputs[{k,1,{},{}}] = input
-     targets[k] = target[1]
+     if params.dataset == "omniglot" then
+       inputs[{k,1,{},{}}] = data[1][i]:clone()
+       targets[k] = data[2][i]
+     else
+       local sample = data[i]
+       local input = sample[1]:clone()
+       local _,target = sample[2]:clone():max(1)
+       inputs[{k,1,{},{}}] = input
+       targets[k] = target[1]
+     end
      k = k + 1
   end
   inputs = inputs:cuda()
@@ -69,7 +89,11 @@ function init()
 end
 
 function run(data, mode)
-  max_num = data:size()
+  if params.dataset == "omniglot" then
+    max_num = data[1]:size()[1]
+  else
+    max_num = data:size()
+  end
   -- testing
   -- for tt = 1,1 do--trainData:size(),params.bsize do
   bid = 1
@@ -91,7 +115,7 @@ function run(data, mode)
       matio.save('tmp/'.. mode .. 'batch_aff_'.. pp ..'_' .. bid, {aff = affines[pp]})
       matio.save('tmp/'.. mode .. 'batch_ent_'.. pp ..'_' .. bid, {entity = entity_imgs[pp]})
     end
-      
+
     local en_imgs = {}
     counter=1
     for bb = 1,MAX_IMAGES_TO_DISPLAY do

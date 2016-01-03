@@ -121,9 +121,9 @@ function create_encoder(params)
 
   local imout = get_transformer(input_image, 0, enc, params, 0, 0) -- get_transformer(params, 0, 0)({input_image, enc})
 
-  local enc1_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(1, 64, 3, 3)(imout)))
-  local enc2_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(64, 64, 3, 3)(enc1_high)))
-  local affines = nn.Linear(64*6*6,params.rnn_size)((nn.Reshape(64*6*6)(enc2_high)))
+  local enc1_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(1, 64, 3, 3)(input_image)))
+  local enc2_high = nn.SpatialMaxPooling(2,2)(nn.ReLU()(nn.SpatialConvolution(64, 96, 3, 3)(enc1_high)))
+  local affines = nn.Linear(96*6*6,params.rnn_size)((nn.Reshape(96*6*6)(enc2_high)))
 
   -- local enc1_high = nn.ReLU()(nn.Linear(1024,2048)(nn.Reshape(1024)(imout)))
   -- local enc2_high = nn.ReLU()(nn.Linear(2048, 512)(enc1_high))
@@ -145,17 +145,22 @@ function create_network(params)
   --- encoder ---
   local enc_params = create_encoder(params)({x})
 
-  local rnn_i = {[0] = nn.Identity()(enc_params)}
-  local next_s = {}
-  local split = {prev_s:split(2 * params.layers)}
-  for layer_idx = 1, params.layers do
-    local prev_c         = split[2 * layer_idx - 1]
-    local prev_h         = split[2 * layer_idx]
-    local dropped        = rnn_i[layer_idx - 1]
-    local next_c, next_h = lstm(dropped, prev_c, prev_h)
-    table.insert(next_s, next_c)
-    table.insert(next_s, next_h)
-    rnn_i[layer_idx] = next_h
+  if false then
+    local rnn_i = {[0] = nn.Identity()(enc_params)}
+    local next_s = {}
+    local split = {prev_s:split(2 * params.layers)}
+    for layer_idx = 1, params.layers do
+      local prev_c         = split[2 * layer_idx - 1]
+      local prev_h         = split[2 * layer_idx]
+      local dropped        = rnn_i[layer_idx - 1]
+      local next_c, next_h = lstm(dropped, prev_c, prev_h)
+      table.insert(next_s, next_c)
+      table.insert(next_s, next_h)
+      rnn_i[layer_idx] = next_h
+    end
+  else
+    rnn_i = {[1] = nn.Tanh()(nn.Linear(params.rnn_size, params.rnn_size)(enc_params))}
+    next_s = nn.Identity()(prev_s)
   end
 
   local sts = {}
@@ -197,13 +202,14 @@ function create_network(params)
   end
 
 
-  local canvas_out;
+  local canvas_out, err;
   if params.dataset == "omniglot" then
-    canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+    canvas_out = nn.Identity()(nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas)))))
+    err = nn.MSECriterion()({canvas_out, x})
   else
     canvas_out = nn.Reshape(1,image_width,image_width)(nn.MulConstant(1)(nn.Sum(2)(nn.JoinTable(2)(canvas))))
+    err = nn.MSECriterion()({canvas_out, x})
   end
-  local err = nn.MSECriterion()({canvas_out, x})
   
 
   -- local canvas_out = nn.MulConstant(1/params.num_entities)(nn.Reshape(1,image_width,image_width)(nn.Sum(2)(nn.JoinTable(2)(canvas))))

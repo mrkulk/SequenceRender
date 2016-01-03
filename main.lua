@@ -22,15 +22,19 @@ params = lapp[[
    --bsize            (default 100)           bsize
    --image_width      (default 32)           
    --template_width   (default 10)           
-   --num_entities     (default 20)           number of entities
+   --num_entities     (default 10)           number of entities
    --rnn_size         (default 100)
    --seq_length       (default 1)
    --layers           (default 1)
    --init_weight      (default 0.1)
    --max_grad_norm    (default 5)
-   --dataset          (default "mnist")
+   --dataset          (default "omniglot")
 ]]
-Entity_FACTOR = 5e3
+if params.dataset == "omniglot" then
+  Entity_FACTOR = 5e3
+else
+  Entity_FACTOR = 5e3
+end
 require 'Entity'
 config = {
     learningRate = params.lr,
@@ -40,6 +44,16 @@ config = {
 require 'model'
 -- torch.manualSeed(1)
 
+ function normalizeGlobal(data, mean_, std_)
+    local std = std_ or data:std()
+    local mean = mean_ or data:mean()
+    data:add(-mean)
+    data:mul(1/std)
+    return data
+ end
+
+
+
 trainLogger = optim.Logger(paths.concat(params.save .. '/', 'train.log'))
 testLogger = optim.Logger(paths.concat(params.save .. '/', 'test.log'))
 
@@ -47,9 +61,12 @@ if params.dataset == "omniglot" then
   trainData = torch.load('dataset/omniglot_train_imgs.t7')
   testData = torch.load('dataset/omniglot_test_imgs.t7')
 
-  fulldata = torch.zeros(trainData:size(1) + testData:size(1), 1, 32,32)
-  fulldata[{{1,trainData:size(1)},{},{},{}}] = trainData:clone()
-  fulldata[{{trainData:size(1)+1,testData:size(1)+trainData:size(1) },{},{},{}}] = testData:clone()
+  -- testData = normalizeGlobal(testData, mean, std)
+  -- trainData = normalizeGlobal(trainData, mean, std)
+
+  -- fulldata = torch.zeros(trainData:size(1) + testData:size(1), 1, 32,32)
+  fulldata = trainData:clone()
+  -- fulldata[{{trainData:size(1)+1,testData:size(1)+trainData:size(1) },{},{},{}}] = testData:clone()
 else
   --single mnist
   -- create training set and normalize
@@ -58,7 +75,7 @@ else
   -- trainData:normalizeGlobal(mean, std)
   -- create test set and normalize
   testData = mnist.loadTestSet(nbTestingPatches, geometry)
-  testData.data = testData.data/255
+  -- testData.data = testData.data/255
   -- testData:normalizeGlobal(mean, std)
   fulldata = torch.zeros(trainData.data:size(1) + testData.data:size(1), 1, 32,32)
   fulldata[{{1,trainData.data:size(1)},{},{},{}}] = trainData.data:clone()
